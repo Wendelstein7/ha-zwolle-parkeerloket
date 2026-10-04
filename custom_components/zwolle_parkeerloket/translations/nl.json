@@ -165,9 +165,6 @@
     "calendar_plate_is_fixed": {
       "message": "Het kenteken van een boeking kan niet worden gewijzigd. Annuleer de boeking en boek opnieuw voor het andere kenteken."
     },
-    "calendar_whole_minutes": {
-      "message": "Het portaal wijzigt een boeking in hele minuten."
-    },
     "calendar_whole_days": {
       "message": "Een parkeerboeking kan geen dagvullende gebeurtenis zijn."
     }

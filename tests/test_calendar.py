@@ -32,8 +32,16 @@ END_URL = f"{API_BASE_URL}/api/reservation/end"
 
 IDLE = "2026-10-05T07:00:00+00:00"
 DURING = "2026-10-05T08:15:00+00:00"
-START = "2026-10-05T08:00:00+00:00"
-END = "2026-10-05T08:30:00+00:00"
+
+# The portal stores a booking's window to the microsecond, while the Calendar panel
+# carries it through a JavaScript date, which keeps only milliseconds. A field the
+# user did not touch therefore comes back as the stored value with the last three
+# digits dropped, which is what these two constants are for: the tests that edit a
+# booking send them for the fields the user left alone.
+START = "2026-10-05T08:00:26.142660+00:00"
+END = "2026-10-05T08:30:26.142660+00:00"
+START_UNTOUCHED = "2026-10-05T08:00:26.142+00:00"
+END_UNTOUCHED = "2026-10-05T08:30:26.142+00:00"
 
 
 def _mock_portal(aioclient_mock: Any, payload: dict[str, Any]) -> None:
@@ -113,7 +121,11 @@ def _requests(aioclient_mock: Any, url: str) -> list[dict[str, Any]]:
 
 
 def _event(*, start: str, end: str, summary: str = "AA11BB") -> dict[str, Any]:
-    """Return the event body the panel sends when an event is edited."""
+    """Return the event body the panel sends when an event is edited.
+
+    The panel always sends both ends of the window, so a test that changes one of
+    them passes the untouched value for the other.
+    """
     return {"dtstart": start, "dtend": end, "summary": summary}
 
 
@@ -213,7 +225,13 @@ async def test_resizing_an_event_changes_the_duration(
     hass_ws_client: Any,
     hass_admin_user: Any,
 ) -> None:
-    """The portal takes a number of minutes, so a new end time becomes a delta."""
+    """The portal takes a number of minutes, so a new end time becomes a delta.
+
+    This is the case a user hits: the end is dragged to a later time while the
+    start is left alone. The start still comes back through the panel one
+    sub-millisecond short of what the portal stored, which must not be mistaken
+    for the booking having been moved.
+    """
     _mock_portal(aioclient_mock, build_account_payload(reservation=(START, END)))
     await _setup(hass, account_entry, freezer, DURING)
 
@@ -225,7 +243,7 @@ async def test_resizing_an_event_changes_the_duration(
             "type": "calendar/event/update",
             "entity_id": _calendar_id(hass),
             "uid": "555001",
-            "event": _event(start=START, end="2026-10-05T09:00:00+00:00"),
+            "event": _event(start=START_UNTOUCHED, end="2026-10-05T09:00:00+00:00"),
         },
     )
 
@@ -233,6 +251,107 @@ async def test_resizing_an_event_changes_the_duration(
     body = _requests(aioclient_mock, UPDATE_URL)[0]
     assert body["Minutes"] == 30
     assert body["ReservationID"] == 555001
+
+
+async def test_a_booking_can_be_extended_by_a_whole_hour(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+    hass_ws_client: Any,
+    hass_admin_user: Any,
+) -> None:
+    """An added hour is sent as sixty minutes, not fifty-nine.
+
+    The stored end carries seconds the panel cannot show, so the difference has to
+    be rounded back to the minute the user actually picked.
+    """
+    _mock_portal(aioclient_mock, build_account_payload(reservation=(START, END)))
+    await _setup(hass, account_entry, freezer, DURING)
+
+    reply = await _command(
+        hass,
+        hass_ws_client,
+        hass_admin_user,
+        {
+            "type": "calendar/event/update",
+            "entity_id": _calendar_id(hass),
+            "uid": "555001",
+            "event": _event(start=START_UNTOUCHED, end="2026-10-05T09:30:00+00:00"),
+        },
+    )
+
+    assert reply["success"] is True, reply
+    assert _requests(aioclient_mock, UPDATE_URL)[0]["Minutes"] == 60
+
+
+async def test_resizing_lands_exactly_on_the_minute_the_user_picked(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+    hass_ws_client: Any,
+    hass_admin_user: Any,
+) -> None:
+    """The delta is measured from the minute the panel showed, not from the seconds.
+
+    The panel displays 08:30 for a booking stored until 08:30:40, so asking it for
+    09:00 is half an hour. Measuring from the stored seconds would send 29 minutes
+    and leave the booking ending a minute earlier than the user asked for.
+    """
+    late_seconds = ("2026-10-05T08:00:40.142660Z", "2026-10-05T08:30:40.142660Z")
+    _mock_portal(aioclient_mock, build_account_payload(reservation=late_seconds))
+    await _setup(hass, account_entry, freezer, DURING)
+
+    reply = await _command(
+        hass,
+        hass_ws_client,
+        hass_admin_user,
+        {
+            "type": "calendar/event/update",
+            "entity_id": _calendar_id(hass),
+            "uid": "555001",
+            "event": _event(
+                start="2026-10-05T08:00:40.142+00:00",
+                end="2026-10-05T09:00:00+00:00",
+            ),
+        },
+    )
+
+    assert reply["success"] is True, reply
+    assert _requests(aioclient_mock, UPDATE_URL)[0]["Minutes"] == 30
+
+
+async def test_saving_without_changing_anything_leaves_the_booking_alone(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+    hass_ws_client: Any,
+    hass_admin_user: Any,
+) -> None:
+    """The panel sends both ends even when nothing was edited.
+
+    Both ends come back with the microseconds dropped, which is a difference too
+    small to be a change and must not be turned into a portal call.
+    """
+    _mock_portal(aioclient_mock, build_account_payload(reservation=(START, END)))
+    await _setup(hass, account_entry, freezer, DURING)
+
+    reply = await _command(
+        hass,
+        hass_ws_client,
+        hass_admin_user,
+        {
+            "type": "calendar/event/update",
+            "entity_id": _calendar_id(hass),
+            "uid": "555001",
+            "event": _event(start=START_UNTOUCHED, end=END_UNTOUCHED),
+        },
+    )
+
+    assert reply["success"] is True, reply
+    assert not _requests(aioclient_mock, UPDATE_URL)
 
 
 async def test_shrinking_an_event_shortens_the_booking(
@@ -244,7 +363,7 @@ async def test_shrinking_an_event_shortens_the_booking(
     hass_admin_user: Any,
 ) -> None:
     """A shorter end time is a negative delta."""
-    longer = ("2026-10-05T08:00:00Z", "2026-10-05T09:00:00Z")
+    longer = ("2026-10-05T08:00:26.142660Z", "2026-10-05T09:00:26.142660Z")
     _mock_portal(aioclient_mock, build_account_payload(reservation=longer))
     await _setup(hass, account_entry, freezer, DURING)
 
@@ -256,7 +375,7 @@ async def test_shrinking_an_event_shortens_the_booking(
             "type": "calendar/event/update",
             "entity_id": _calendar_id(hass),
             "uid": "555001",
-            "event": _event(start=START, end="2026-10-05T08:30:00+00:00"),
+            "event": _event(start=START_UNTOUCHED, end="2026-10-05T08:30:00+00:00"),
         },
     )
 
@@ -275,7 +394,9 @@ async def test_moving_an_event_is_refused(
     """A booking cannot start earlier or later, so a dragged start is rejected.
 
     The portal only adjusts how long a reservation lasts; letting the panel appear
-    to move it would leave the display disagreeing with the portal.
+    to move it would leave the display disagreeing with the portal. A minute is the
+    smallest move the panel can express, and it is well clear of the sub-second
+    difference an untouched field produces.
     """
     _mock_portal(aioclient_mock, build_account_payload(reservation=(START, END)))
     await _setup(hass, account_entry, freezer, DURING)
@@ -288,7 +409,7 @@ async def test_moving_an_event_is_refused(
             "type": "calendar/event/update",
             "entity_id": _calendar_id(hass),
             "uid": "555001",
-            "event": _event(start="2026-10-05T08:30:00+00:00", end=END),
+            "event": _event(start="2026-10-05T08:01:26.142+00:00", end=END_UNTOUCHED),
         },
     )
 
@@ -316,7 +437,9 @@ async def test_renaming_an_event_is_refused(
             "type": "calendar/event/update",
             "entity_id": _calendar_id(hass),
             "uid": "555001",
-            "event": _event(start=START, end=END, summary="Something else"),
+            "event": _event(
+                start=START_UNTOUCHED, end=END_UNTOUCHED, summary="Something else"
+            ),
         },
     )
 
@@ -324,7 +447,7 @@ async def test_renaming_an_event_is_refused(
     assert not _requests(aioclient_mock, UPDATE_URL)
 
 
-async def test_a_change_of_less_than_a_minute_is_refused(
+async def test_a_change_of_less_than_a_minute_is_treated_as_no_change(
     hass: HomeAssistant,
     aioclient_mock: Any,
     account_entry: MockConfigEntry,
@@ -332,7 +455,12 @@ async def test_a_change_of_less_than_a_minute_is_refused(
     hass_ws_client: Any,
     hass_admin_user: Any,
 ) -> None:
-    """The portal works in whole minutes, so a hair's-breadth drag does nothing."""
+    """An end the panel cannot express as a change is not sent to the portal.
+
+    The panel works in whole minutes, so an end that lands within the same minute
+    as the stored one cannot be what the user meant, and asking the portal for a
+    zero-minute change would only be rejected.
+    """
     _mock_portal(aioclient_mock, build_account_payload(reservation=(START, END)))
     await _setup(hass, account_entry, freezer, DURING)
 
@@ -344,11 +472,11 @@ async def test_a_change_of_less_than_a_minute_is_refused(
             "type": "calendar/event/update",
             "entity_id": _calendar_id(hass),
             "uid": "555001",
-            "event": _event(start=START, end="2026-10-05T08:30:30+00:00"),
+            "event": _event(start=START_UNTOUCHED, end="2026-10-05T08:30:05+00:00"),
         },
     )
 
-    assert reply["success"] is False, reply
+    assert reply["success"] is True, reply
     assert not _requests(aioclient_mock, UPDATE_URL)
 
 

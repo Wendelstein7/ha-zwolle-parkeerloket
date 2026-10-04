@@ -165,9 +165,6 @@
     "calendar_plate_is_fixed": {
       "message": "The licence plate of a booking cannot be changed. Cancel it and book again for the other plate."
     },
-    "calendar_whole_minutes": {
-      "message": "The portal changes a booking by whole minutes."
-    },
     "calendar_whole_days": {
       "message": "A parking booking cannot be an all-day event."
     }

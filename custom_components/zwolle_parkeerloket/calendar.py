@@ -13,7 +13,7 @@ poor way to book. Booking is what the book button and ``start_booking`` are for.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.calendar import (
@@ -31,6 +31,30 @@ from .const import DOMAIN
 from .coordinator import ZwolleParkeerloketConfigEntry, ZwolleParkeerloketCoordinator
 from .entity import ZwolleParkeerloketEntity
 from .models import Reservation
+
+# The Calendar panel carries a booking's window through a JavaScript date, which
+# keeps milliseconds, while the portal stores microseconds: a booking starting at
+# 21:42:26.142660 comes back from the editor as 21:42:26.142. That is the same
+# instant as far as the panel is concerned, and anything a person can pick is at
+# least a minute away, so a second separates "untouched" from "moved".
+_EDITOR_PRECISION = timedelta(seconds=1)
+
+
+def _requested_minutes(stored_end: datetime, requested_end: datetime) -> int:
+    """Return the signed number of minutes the editor is asking for.
+
+    Both ends are compared at the resolution the panel works in, whole minutes: it
+    shows the end as 20:53 even when the portal stored 20:53:46, so asking it for
+    21:23 is half an hour later, not twenty-nine minutes. Measuring from the stored
+    seconds instead would leave the booking ending at 21:22, one minute short of the
+    time the user picked.
+
+    An end that was left alone comes back with the microseconds the editor dropped,
+    which lands on the same minute and therefore on a change of zero.
+    """
+    displayed = dt_util.as_local(stored_end).replace(second=0, microsecond=0)
+    requested = dt_util.as_local(requested_end).replace(second=0, microsecond=0)
+    return round((requested - displayed).total_seconds() / 60)
 
 
 async def async_setup_entry(
@@ -98,6 +122,10 @@ class ZwolleParkeerloketCalendar(ZwolleParkeerloketEntity, CalendarEntity):
         booked, its start and its licence plate are fixed. A moved start or a
         renamed event is therefore refused rather than quietly ignored, and a new
         end time is turned back into the signed number of minutes the portal wants.
+
+        The panel's editor is less precise than the portal: it round-trips a window
+        through a date that keeps milliseconds and shows times in whole minutes, so
+        both comparisons are made at the resolution the panel can actually express.
         """
         reservation = self._reservation_for(uid)
         start = event.get(EVENT_START)
@@ -108,10 +136,7 @@ class ZwolleParkeerloketCalendar(ZwolleParkeerloketEntity, CalendarEntity):
                 translation_key="calendar_whole_days",
             )
 
-        start = dt_util.as_utc(start)
-        end = dt_util.as_utc(end)
-
-        if start != reservation.valid_from:
+        if abs(dt_util.as_utc(start) - reservation.valid_from) >= _EDITOR_PRECISION:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="calendar_start_is_fixed",
@@ -126,12 +151,11 @@ class ZwolleParkeerloketCalendar(ZwolleParkeerloketEntity, CalendarEntity):
                 translation_key="calendar_plate_is_fixed",
             )
 
-        minutes = round((end - reservation.valid_until).total_seconds() / 60)
+        minutes = _requested_minutes(reservation.valid_until, dt_util.as_utc(end))
         if minutes == 0:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="calendar_whole_minutes",
-            )
+            # The panel hands back a booking it never touched with seconds rounded
+            # away, so this is a save with nothing to change rather than an error.
+            return
 
         await self.coordinator.async_change_reservation_time(reservation, minutes)
 

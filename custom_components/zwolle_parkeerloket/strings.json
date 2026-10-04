@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to the Zwolle Parkeerloket",
-        "description": "Enter the Meldnummer and Pincode of your visitor-parking permit.",
+        "description": "Enter the Meldnummer and Pincode of your parking permit.",
         "data": {
           "meldnummer": "Meldnummer",
           "pincode": "Pincode"

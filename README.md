@@ -1,8 +1,10 @@
-# Zwolle Bezoekersparkeren
+# Zwolle Parkeerloket
 
-A [Home Assistant](https://www.home-assistant.io/) integration for visitor-parking
-("bezoekersparkeren") on the Gemeente Zwolle **Parkeerloket** portal (DVSPortal) —
-<https://parkeerloket.zwolle.nl/DVSPortal/>.
+A [Home Assistant](https://www.home-assistant.io/) integration for the Gemeente Zwolle
+**Parkeerloket** portal (DVSPortal) — <https://parkeerloket.zwolle.nl/DVSPortal/>.
+
+The portal manages a parking permit, and the same account can be used to park a visitor's car
+or your own, so this integration covers both.
 
 It tells you, at a glance, whether a parking reservation is active right now, for which
 licence plate, from when until when, and how much balance is left. It can also start, stop,
@@ -31,7 +33,7 @@ extend and shorten a reservation.
 
 ## Entities
 
-One device ("Zwolle Bezoekersparkeren"), with names translated into your Home Assistant
+One device ("Zwolle Parkeerloket"), with names translated into your Home Assistant
 language (Dutch or English). Entity IDs follow that language too, so they may differ from
 the names below.
 
@@ -157,7 +159,7 @@ Cancelling refunds what was not used, and cancelling before the start refunds ev
 
 1. In HACS, open **Integrations** → the three-dot menu → **Custom repositories**.
 2. Add `https://github.com/Wendelstein7/ha-zwolle-bezoekersparkeren` as an **Integration**.
-3. Install **Zwolle Bezoekersparkeren** and restart Home Assistant.
+3. Install **Zwolle Parkeerloket** and restart Home Assistant.
 
 ### Manually
 
@@ -167,7 +169,7 @@ directory and restart Home Assistant.
 ## Configuration
 
 1. Go to **Settings → Devices & services → Add integration**.
-2. Search for **Zwolle Bezoekersparkeren**.
+2. Search for **Zwolle Parkeerloket**.
 3. Enter the **Meldnummer** and **Pincode** printed on your parking permit, or supplied by
    the municipality.
 
@@ -262,7 +264,7 @@ docker compose up -d        # first run may need: sudo docker compose up -d
 ```
 
 Open <http://localhost:8123>, complete onboarding, then go to
-**Settings → Devices & services → Add integration → Zwolle Bezoekersparkeren** and enter the
+**Settings → Devices & services → Add integration → Zwolle Parkeerloket** and enter the
 Meldnummer and Pincode. Useful commands:
 
 ```bash

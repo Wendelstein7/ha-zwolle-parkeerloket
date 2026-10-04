@@ -111,7 +111,7 @@ class LicensePlate:
 
 @dataclass(frozen=True, slots=True)
 class Reservation:
-    """A visitor-parking reservation, active or upcoming."""
+    """A parking reservation, active or upcoming."""
 
     reservation_id: int
     valid_from: datetime

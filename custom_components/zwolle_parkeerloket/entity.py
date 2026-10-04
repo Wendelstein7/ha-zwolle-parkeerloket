@@ -1,4 +1,4 @@
-"""Shared entity behaviour for the Zwolle Bezoekersparkeren integration."""
+"""Shared entity behaviour for the Zwolle Parkeerloket integration."""
 
 from __future__ import annotations
 

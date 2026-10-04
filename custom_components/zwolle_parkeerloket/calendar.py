@@ -1,4 +1,4 @@
-"""Calendar entity for the Zwolle Bezoekersparkeren integration.
+"""Calendar entity for the Zwolle Parkeerloket integration.
 
 Every reservation is an event, one per parked car, so the Calendar panel shows at
 a glance which cars are parked and until when. Home Assistant drives the delete

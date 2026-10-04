@@ -1,4 +1,4 @@
-"""Buttons for the Zwolle Bezoekersparkeren integration.
+"""Buttons for the Zwolle Parkeerloket integration.
 
 Four one-tap actions: book now, stop, extend and shorten. Each is only available
 when the portal would actually accept it, so the UI answers "can I press this?"

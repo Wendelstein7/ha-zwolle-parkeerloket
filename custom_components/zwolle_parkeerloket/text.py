@@ -1,4 +1,4 @@
-"""The licence plate field for the Zwolle Bezoekersparkeren integration.
+"""The licence plate field for the Zwolle Parkeerloket integration.
 
 This entity is both an input and a mirror. Typing into it sets the plate the book
 button will use. Whenever the portal's own plate **changes** — a booking appears,

@@ -1,4 +1,4 @@
-"""Service actions for the Zwolle Bezoekersparkeren integration.
+"""Service actions for the Zwolle Parkeerloket integration.
 
 The actions act on the account rather than on a single entity, so they are
 registered on the integration domain and their target is resolved to a config

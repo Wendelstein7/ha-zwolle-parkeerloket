@@ -1,4 +1,4 @@
-"""Config and options flow for the Zwolle Bezoekersparkeren integration."""
+"""Config and options flow for the Zwolle Parkeerloket integration."""
 
 from __future__ import annotations
 

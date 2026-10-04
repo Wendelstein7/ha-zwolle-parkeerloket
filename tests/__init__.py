@@ -1,1 +1,1 @@
-"""Tests for the Zwolle Bezoekersparkeren integration."""
+"""Tests for the Zwolle Parkeerloket integration."""

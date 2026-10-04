@@ -1,4 +1,4 @@
-"""Polling coordinator for the Zwolle Bezoekersparkeren integration."""
+"""Polling coordinator for the Zwolle Parkeerloket integration."""
 
 from __future__ import annotations
 

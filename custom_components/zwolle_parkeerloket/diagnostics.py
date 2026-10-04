@@ -1,4 +1,4 @@
-"""Diagnostics support for the Zwolle Bezoekersparkeren integration.
+"""Diagnostics support for the Zwolle Parkeerloket integration.
 
 The Meldnummer, the Pincode, the permit media code and every licence plate are
 redacted: they are personal data and diagnostics are meant to be shareable.

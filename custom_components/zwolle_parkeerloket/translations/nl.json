@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Verbind met het Zwolle Parkeerloket",
-        "description": "Vul het meldnummer en de pincode van uw bezoekersparkeervergunning in.",
+        "description": "Vul het meldnummer en de pincode van uw parkeervergunning in.",
         "data": {
           "meldnummer": "Meldnummer",
           "pincode": "Pincode"

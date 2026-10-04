@@ -1,4 +1,4 @@
-"""Sensor entities for the Zwolle Bezoekersparkeren integration."""
+"""Sensor entities for the Zwolle Parkeerloket integration."""
 
 from __future__ import annotations
 

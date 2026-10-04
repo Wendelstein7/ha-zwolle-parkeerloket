@@ -1,10 +1,10 @@
-"""Constants for the Zwolle Bezoekersparkeren integration."""
+"""Constants for the Zwolle Parkeerloket integration."""
 
 from typing import Final
 
 DOMAIN: Final = "zwolle_parkeerloket"
 
-NAME: Final = "Zwolle Bezoekersparkeren"
+NAME: Final = "Zwolle Parkeerloket"
 
 MANUFACTURER: Final = "Gemeente Zwolle"
 

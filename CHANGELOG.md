@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Monitoring of a visitor-parking account on the Gemeente Zwolle "Parkeerloket" portal:
+- Monitoring of a parking account on the Gemeente Zwolle "Parkeerloket" portal:
   - remaining balance sensor
   - binary sensor for whether a car is parked right now
   - licence plate of the car the account is following
@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The integration and its device are called **Zwolle Parkeerloket** rather than
+  "Zwolle Bezoekersparkeren": the account is just as usable for parking your own car as for a
+  visitor's, so the name no longer narrows it to visitors. Entity IDs therefore start with
+  `zwolle_parkeerloket` instead of `zwolle_bezoekersparkeren`.
 - Actions no longer poll after a change: the portal's write responses carry the
   updated permit, which is applied directly.
 

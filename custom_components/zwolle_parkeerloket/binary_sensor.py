@@ -1,4 +1,4 @@
-"""Binary sensor entities for the Zwolle Bezoekersparkeren integration."""
+"""Binary sensor entities for the Zwolle Parkeerloket integration."""
 
 from __future__ import annotations
 

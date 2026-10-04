@@ -1,7 +1,7 @@
-"""The Zwolle Bezoekersparkeren integration.
+"""The Zwolle Parkeerloket integration.
 
-Read-only monitor for visitor-parking reservations and balance on the Gemeente
-Zwolle "Parkeerloket" (DVSPortal) portal.
+Parking reservations and balance for an account on the Gemeente Zwolle
+"Parkeerloket" (DVSPortal) portal.
 """
 
 from __future__ import annotations

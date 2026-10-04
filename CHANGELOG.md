@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not end a session, and the portal's bookable window is respected before asking.
 - Translations for the new entities, service actions and error messages in English
   and Dutch.
+- The Gemeente Zwolle logo as the integration's icon, shipped as a local brand
+  directory so Home Assistant shows it without waiting for a release of the shared
+  brands repository.
 - Initial version monitoring a visitor-parking account on the Gemeente Zwolle
   "Parkeerloket" portal:
   - remaining balance sensor

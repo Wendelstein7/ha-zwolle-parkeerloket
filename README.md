@@ -249,6 +249,14 @@ The fixtures under `tests/fixtures` and the placeholders in `tests/helpers.py` a
 Never copy real credentials, licence plates or names out of a live account into this repository:
 this repository is public, and the portal account belongs to a real person.
 
+## Brand assets
+
+The icon under `custom_components/zwolle_parkeerloket/brand/` is the logo of Gemeente
+Zwolle, taken from [zwolle.nl](https://www.zwolle.nl). That mark belongs to the
+municipality; it is used here only to identify the portal this integration talks to, and
+it implies no affiliation with or endorsement by Gemeente Zwolle. It will be replaced
+with a neutral icon if the municipality objects.
+
 ## License
 
 [MIT](LICENSE)

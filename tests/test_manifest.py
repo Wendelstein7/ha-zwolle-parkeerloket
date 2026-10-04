@@ -4,15 +4,64 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 import tomllib
 from pathlib import Path
+from urllib.parse import urlparse
 
+import voluptuous as vol
 import yaml
+from awesomeversion import AwesomeVersion
 
 from custom_components.zwolle_parkeerloket import services as service_module
 
 REPO_ROOT = Path(__file__).parents[1]
 COMPONENT_DIR = REPO_ROOT / "custom_components" / "zwolle_parkeerloket"
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+# The HACS action validates these files with its own schemas, fetched directly
+# from raw.githubusercontent.com. That action ships as a Docker image and cannot
+# be run locally, so mirroring its schemas here means broken metadata fails in the
+# test suite instead of only in CI.
+# Source: hacs/integration custom_components/hacs/utils/validate.py
+HACS_MANIFEST_SCHEMA = vol.Schema(
+    {
+        vol.Optional("content_in_root"): bool,
+        vol.Optional("country"): vol.Any(str, [str]),
+        vol.Optional("filename"): str,
+        vol.Optional("hacs"): str,
+        vol.Optional("hide_default_branch"): bool,
+        vol.Optional("homeassistant"): str,
+        vol.Optional("persistent_directory"): str,
+        vol.Optional("render_readme"): bool,
+        vol.Optional("zip_release"): bool,
+        vol.Required("name"): str,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+# The only filenames Home Assistant serves out of a local brand directory.
+# Source: homeassistant/components/brands/const.py
+ALLOWED_BRAND_IMAGES = frozenset(
+    {
+        "icon.png",
+        "logo.png",
+        "icon@2x.png",
+        "logo@2x.png",
+        "dark_icon.png",
+        "dark_logo.png",
+        "dark_icon@2x.png",
+        "dark_logo@2x.png",
+    }
+)
+
+
+def _png_size(path: Path) -> tuple[int, int]:
+    """Return the width and height read straight from the PNG header."""
+    data = path.read_bytes()
+    assert data[:8] == PNG_MAGIC, f"{path.name} is not a PNG image"
+    return struct.unpack(">II", data[16:24])
 
 
 def _manifest() -> dict:
@@ -45,6 +94,30 @@ def test_manifest_version_is_parseable() -> None:
     assert all(part.isdigit() for part in parts[:2])
 
 
+def test_hacs_json_matches_the_hacs_schema() -> None:
+    """``hacs.json`` must satisfy the schema the HACS action validates it with."""
+    hacs = json.loads((REPO_ROOT / "hacs.json").read_text(encoding="utf-8"))
+
+    # Raises Invalid if a key is unknown or has the wrong type.
+    HACS_MANIFEST_SCHEMA(hacs)
+
+
+def test_manifest_declares_everything_hacs_requires() -> None:
+    """HACS reads the manifest directly, so its required keys must all be present."""
+    manifest = _manifest()
+
+    assert manifest["codeowners"], "HACS requires at least one code owner"
+    assert isinstance(manifest["codeowners"], list)
+    assert manifest["name"]
+    assert manifest["domain"]
+    for key in ("documentation", "issue_tracker"):
+        parsed = urlparse(manifest[key])
+        assert parsed.scheme in {"http", "https"} and parsed.netloc, (
+            f"{key} is not an absolute URL: {manifest[key]!r}"
+        )
+    assert AwesomeVersion(manifest["version"]).valid
+
+
 def test_tooling_configuration_is_consistent() -> None:
     """Test and lint configuration should stay in sync with this test suite."""
     pyproject = tomllib.loads(
@@ -64,6 +137,22 @@ def _translation_keys(data: dict, prefix: str = "") -> set[str]:
         if isinstance(value, dict):
             keys |= _translation_keys(value, f"{prefix}{key}.")
     return keys
+
+
+def test_brand_assets_are_present_and_correctly_sized() -> None:
+    """The local brand directory is what HACS and Home Assistant look for.
+
+    HACS passes its brands check when ``brand/icon.png`` is in the repository tree,
+    and Home Assistant serves the local copy in preference to any image from the
+    brands repository.
+    """
+    brand_dir = COMPONENT_DIR / "brand"
+    assert (brand_dir / "icon.png").is_file(), "hacs validation requires brand/icon.png"
+    assert {path.name for path in brand_dir.iterdir()} <= ALLOWED_BRAND_IMAGES
+
+    # Sizes mandated by the brands repository specification.
+    assert _png_size(brand_dir / "icon.png") == (256, 256)
+    assert _png_size(brand_dir / "icon@2x.png") == (512, 512)
 
 
 def test_translations_are_consistent() -> None:

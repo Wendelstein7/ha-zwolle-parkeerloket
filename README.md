@@ -157,6 +157,14 @@ Cancelling refunds what was not used, and cancelling before the start refunds ev
 
 ### HACS
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Wendelstein7&repository=ha-zwolle-parkeerloket&category=integration)
+
+The button adds the repository to HACS on your own instance, with the URL and category
+already filled in. It does not install anything by itself: after adding it, install
+**Zwolle Parkeerloket** and restart Home Assistant.
+
+Or do it by hand:
+
 1. In HACS, open **Integrations** → the three-dot menu → **Custom repositories**.
 2. Add `https://github.com/Wendelstein7/ha-zwolle-parkeerloket` as an **Integration**.
 3. Install **Zwolle Parkeerloket** and restart Home Assistant.

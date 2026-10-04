@@ -1,21 +1,27 @@
 # Zwolle Bezoekersparkeren
 
-A read-only [Home Assistant](https://www.home-assistant.io/) integration that monitors
-visitor-parking ("bezoekersparkeren") on the Gemeente Zwolle **Parkeerloket** portal
-(DVSPortal) — <https://parkeerloket.zwolle.nl/DVSPortal/>.
+A [Home Assistant](https://www.home-assistant.io/) integration for visitor-parking
+("bezoekersparkeren") on the Gemeente Zwolle **Parkeerloket** portal (DVSPortal) —
+<https://parkeerloket.zwolle.nl/DVSPortal/>.
 
 It tells you, at a glance, whether a parking reservation is active right now, for which
-licence plate, from when until when, and how much balance is left.
+licence plate, from when until when, and how much balance is left. It can also start, stop,
+extend and shorten a reservation.
 
 > [!IMPORTANT]
 > This integration talks to an **unofficial, undocumented** API. It was reverse engineered
 > from the portal's own web app and can break at any time without notice. It is not
 > affiliated with or endorsed by Gemeente Zwolle.
 
+> [!WARNING]
+> Booking and extending **spend balance**, and the portal allows only one reservation at a
+> time. The integration guards against this as much as it reasonably can — see
+> [Actions](#actions) — but a booking you make is a real booking.
+
 ## Features
 
-- **Monitoring only.** No booking, extending or cancelling. A stray service call would cost
-  real money, so those actions are deliberately not exposed.
+- Monitoring: balance, the current reservation, its plate and its window.
+- Actions: book now, stop, extend and shorten, as buttons and as service actions.
 - Automatic re-login when the portal session expires, and a reauthentication flow if the
   credentials stop working.
 - Configurable polling interval (the portal is a shared production system, so the minimum
@@ -23,18 +29,89 @@ licence plate, from when until when, and how much balance is left.
 
 ## Entities
 
-One device ("Zwolle Bezoekersparkeren") with:
+One device ("Zwolle Bezoekersparkeren"), with names translated into your Home Assistant
+language (Dutch or English). Entity IDs follow that language too, so they may differ from
+the names below.
 
 | Entity | Description |
 | --- | --- |
-| `sensor.…_saldo` | Remaining balance, in minutes (shown as hours in the UI). |
-| `binary_sensor.…_parkeren_actief` | `on` while a reservation covers the current moment. |
-| `sensor.…_kenteken` | Licence plate of the reservation covering now, or of the next upcoming one. |
-| `sensor.…_start` | Start of that reservation. |
-| `sensor.…_eind` | End of that reservation. |
-| `sensor.…_zone` | Permit zone (e.g. `ZONE1`). Disabled by default. |
+| Balance | Remaining balance, in minutes (shown as hours in the UI). |
+| Parking active | `on` while a reservation covers the current moment. |
+| Licence plate | Plate of the reservation covering now, or of the next upcoming one. |
+| Parking start | Start of that reservation. |
+| Parking end | End of that reservation. |
+| Zone | Permit zone (e.g. `ZONE1`). Disabled by default. |
+| Licence plate to book | The plate the book button will use. See [Actions](#actions). |
+| Book now | Book a parking session starting now. |
+| Stop booking | Cancel the current reservation. |
+| Extend by 30 minutes | Add 30 minutes to the current reservation. |
+| Shorten by 30 minutes | Take 30 minutes off the current reservation. |
 
 When no reservation exists at all, the plate sensor is `unknown` and the binary sensor is `off`.
+Each button is `unavailable` when the portal would refuse the action, so the UI says "you
+cannot do that right now" before you find out the hard way.
+
+## Actions
+
+### The licence plate field
+
+Booking needs a licence plate, so there is a `text` entity for it. It behaves as both an
+input and a mirror:
+
+- typing sets the plate that the **Book now** button will book, normalised to the form the
+  portal expects (`aa-11-bb` becomes `AA11BB`);
+- when the plate the portal reports **changes** — you booked, or a booking appeared
+  elsewhere — the field snaps to that value, so it always shows what is really booked;
+- a plate you typed is otherwise left alone, and survives restarts, so it is still there
+  next time you book.
+
+### Buttons
+
+| Button | What it does |
+| --- | --- |
+| Book now | Books the plate in the field, starting now, for the portal's own default duration. |
+| Stop booking | Cancels the current reservation, refunding the minutes it had not used. |
+| Extend by 30 minutes | Adds 30 minutes to the current reservation. |
+| Shorten by 30 minutes | Takes 30 minutes off it, if that does not end the session first. |
+
+Booking deliberately always creates the portal's default duration rather than a duration you
+pick: sending a start time of "now" can be rejected as being in the past by the time the
+portal processes it. Use the extend and shorten buttons, or the action below, to reach a
+different duration.
+
+### Service actions
+
+Available as `zwolle_parkeerloket.<action>`, targeting the parking account (any of its
+entities, or its device).
+
+| Action | Fields | Description |
+| --- | --- | --- |
+| `start_booking` | `license_plate`, `force` | Books starting now. Without `license_plate` the plate field is used. |
+| `stop_booking` | — | Cancels the current reservation. |
+| `change_booking_time` | `minutes` | Extends (positive) or shortens (negative) the current reservation. |
+
+### Guardrails
+
+- **Only one reservation at a time.** `start_booking` refuses while a reservation exists,
+  because a second booking spends balance. Pass `force: true` if you really mean it, and
+  the **Nu boeken** button is simply unavailable.
+- **Extending is blocked when the portal blocks it.** The portal names the reservations it
+  will not prolong; those cannot be extended from here either.
+- **Shortening cannot end a session.** A change that would move the end into the past is
+  refused, which is the same rule the portal's own web app applies.
+- **The bookable window is respected.** The portal publishes how far ahead you can book
+  (about two months); extending beyond that is refused before asking, with a message
+  explaining why.
+- **Nothing happens by itself.** The integration only acts when you or an automation ask it
+  to; polling never books, extends or cancels anything.
+- Unavailable states and error messages aside, the portal has the last word: any rejection it
+  returns is shown to you, in its own words when the reason is not one we recognise.
+
+### Balance and cost
+
+Extended and shortened reservation lengths are charged and refunded by the portal, not by
+this integration: minutes inside a paid window cost balance, minutes in a free window do not.
+Cancelling refunds what was not used, and cancelling before the start refunds everything.
 
 ## Installation
 
@@ -71,6 +148,12 @@ default 5).
 | `Invalid authentication` during setup | Wrong Meldnummer/Pincode, or the permit is no longer active. |
 | `Failed to connect` during setup | The portal is unreachable, or is down for maintenance. |
 | Sensors stop updating, "needs reauthentication" appears | The session expired and could not be renewed, or the password changed. Reconfigure the integration. |
+| "A parking session already exists" when booking | The portal holds one reservation at a time. Stop it first, or pass `force: true`. |
+| "No licence plate to book" | The plate field is empty. Fill it in, or pass `license_plate` to `start_booking`. |
+| "is not a valid licence plate" | The plate has a typo or an unexpected shape. Letters and digits only. |
+| "cannot be extended by N minutes" | The portal will not prolong this reservation, or it already ends at the furthest bookable moment. |
+| "cannot be shortened by N minutes without ending it" | Shortening that far would move the end into the past. |
+| An error quoting the portal in Dutch | The portal rejected the request for a reason we do not translate, so its own wording is shown verbatim. |
 
 Enable debug logging if you need more detail:
 
@@ -96,6 +179,15 @@ Notable behaviours of the portal that this integration handles:
   once more, and retries exactly one time.
 - CSRF tokens rotate on every login, and the newly issued token must be re-read afterwards.
 - Only one reservation can be active at a time, so the booking list is not modelled.
+- Booking actions answer with the updated permit rather than the whole account, so the
+  integration applies that response directly instead of polling again.
+- Changing a reservation is a **signed number of minutes**, not a new end time. The window and
+  the plate of an existing reservation cannot be changed in place.
+- Booking omits the start and end dates, which makes the portal book from the current moment
+  for its own default duration. A reservation can therefore only be lengthened or shortened
+  afterwards, which is all the API offers anyway.
+- Business errors arrive with **HTTP 200** and an `ErrorMessage` body, so a status check alone
+  would report rejections as successes.
 
 ## Development
 

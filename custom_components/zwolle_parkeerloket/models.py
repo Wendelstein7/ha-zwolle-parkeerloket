@@ -6,10 +6,33 @@ imported, parsed and tested on its own.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+# Dutch licence plates, and the plates of visiting foreigners, in their normalised
+# form: letters and digits only, no dashes or spaces.
+PLATE_PATTERN = re.compile(r"^[A-Z0-9]{4,10}$")
+
+# Separators people type into a plate field but the API does not expect.
+_PLATE_SEPARATORS = re.compile(r"[\s\-.]")
+
+
+def normalise_plate(value: str) -> str:
+    """Return a licence plate in the form the API expects.
+
+    The portal takes plates without separators and in capitals, so ``aa-11-bb``
+    becomes ``AA11BB``.
+
+    Raises:
+        ValueError: the value is not a plausible licence plate.
+    """
+    plate = _PLATE_SEPARATORS.sub("", value).upper()
+    if not PLATE_PATTERN.match(plate):
+        raise ValueError(f"{value!r} is not a valid licence plate")
+    return plate
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -118,12 +141,18 @@ class PermitMedia:
     zone_code: str | None = None
     reservations: tuple[Reservation, ...] = ()
     license_plates: tuple[LicensePlate, ...] = ()
+    restricted_prolong_ids: frozenset[int] = frozenset()
+    max_bookable_end: datetime | None = None
 
     @classmethod
     def from_json(
-        cls, payload: Mapping[str, Any], *, zone_code: str | None = None
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        zone_code: str | None = None,
+        max_bookable_end: datetime | None = None,
     ) -> PermitMedia:
-        """Build a permit medium, inheriting the zone from its permit."""
+        """Build a permit medium, inheriting the zone and horizon from its permit."""
         reservations = sorted(
             (
                 reservation
@@ -144,6 +173,11 @@ class PermitMedia:
             zone_code=zone_code,
             reservations=tuple(reservations),
             license_plates=plates,
+            restricted_prolong_ids=frozenset(
+                _as_int(item)
+                for item in payload.get("RestrictedProlongReservationIDs") or []
+            ),
+            max_bookable_end=max_bookable_end,
         )
 
     def reservation_covering(self, moment: datetime) -> Reservation | None:
@@ -172,6 +206,60 @@ class PermitMedia:
         """
         return self.reservation_covering(moment) or self.upcoming_reservation(moment)
 
+    def prolong_is_restricted(self, reservation: Reservation) -> bool:
+        """Return whether the portal refuses to extend this reservation.
+
+        The portal names the reservations that may not be prolonged, for example
+        because they already reach the end of the bookable window. Its own web app
+        hides the extend control for those, so we treat it as a hard block rather
+        than letting the user walk into a rejection.
+        """
+        return reservation.reservation_id in self.restricted_prolong_ids
+
+    def extension_room(self, reservation: Reservation) -> timedelta | None:
+        """Return how much later this reservation may end.
+
+        ``None`` means the portal did not publish its bookable window, in which
+        case the request is left to the portal to judge.
+        """
+        if self.max_bookable_end is None:
+            return None
+        return max(self.max_bookable_end - reservation.valid_until, timedelta())
+
+    def can_change_by(
+        self, reservation: Reservation, minutes: int, moment: datetime
+    ) -> bool:
+        """Return whether changing this reservation by ``minutes`` is possible.
+
+        Positive values extend and negative values shorten. Extending is limited
+        by the bookable window and by the portal's prolong restrictions; shortening
+        may never move the end into the past, which is the same rule the portal's
+        own web app applies before offering its minus control.
+        """
+        if minutes == 0:
+            return False
+        if minutes < 0:
+            return reservation.valid_until + timedelta(minutes=minutes) > moment
+        if self.prolong_is_restricted(reservation):
+            return False
+        room = self.extension_room(reservation)
+        return room is None or room >= timedelta(minutes=minutes)
+
+
+def _permit_horizon(permit: Mapping[str, Any]) -> datetime | None:
+    """Return the furthest moment the portal allows a reservation to end.
+
+    The portal publishes its bookable window as a rolling calendar in
+    ``BlockTimes``; its own web app uses the end of the last block as the maximum
+    date of its pickers, so that is the horizon we validate against too.
+    """
+    latest: datetime | None = None
+    for block in permit.get("BlockTimes") or []:
+        end = _parse_timestamp(block.get("ValidUntil"))
+        if end is not None and (latest is None or end > latest):
+            latest = end
+    return latest
+
 
 @dataclass(frozen=True, slots=True)
 class Account:
@@ -186,11 +274,57 @@ class Account:
         media: list[PermitMedia] = []
         for permit in payload.get("Permits") or []:
             zone_code = permit.get("ZoneCode")
+            horizon = _permit_horizon(permit)
             media.extend(
-                PermitMedia.from_json(permit_media, zone_code=zone_code)
+                PermitMedia.from_json(
+                    permit_media, zone_code=zone_code, max_bookable_end=horizon
+                )
                 for permit_media in permit.get("PermitMedias") or []
             )
         return cls(name=str(payload.get("Name") or ""), media=tuple(media))
+
+    def merged_with_permit(self, payload: Mapping[str, Any]) -> Account:
+        """Return a copy with the permit of a write response merged in.
+
+        ``reservation/create|update|end`` answer with a single ``Permit`` instead
+        of the whole model. The portal's own web app merges it into its cached
+        state; doing the same means a write needs no extra poll. A response that
+        carries the full model instead is used as-is.
+        """
+        permit = payload.get("Permit")
+        if not isinstance(permit, Mapping):
+            return Account.from_json(payload)
+
+        zone_code = permit.get("ZoneCode")
+        horizon = _permit_horizon(permit)
+        replacements = {
+            (media.code, media.type_id): media
+            for media in (
+                PermitMedia.from_json(
+                    permit_media, zone_code=zone_code, max_bookable_end=horizon
+                )
+                for permit_media in permit.get("PermitMedias") or []
+            )
+        }
+
+        merged: list[PermitMedia] = []
+        for existing in self.media:
+            media = replacements.pop((existing.code, existing.type_id), None)
+            if media is None:
+                merged.append(existing)
+                continue
+            # Booking does not touch the saved plates or the permit metadata, so a
+            # response that omits them must not drop what we already knew.
+            if not media.license_plates:
+                media = replace(media, license_plates=existing.license_plates)
+            if media.zone_code is None:
+                media = replace(media, zone_code=existing.zone_code)
+            if media.max_bookable_end is None:
+                media = replace(media, max_bookable_end=existing.max_bookable_end)
+            merged.append(media)
+
+        merged.extend(replacements.values())
+        return Account(name=self.name, media=tuple(merged))
 
     def find_media(
         self, code: str | None, type_id: int | None = None
@@ -213,4 +347,5 @@ __all__ = [
     "LicensePlate",
     "PermitMedia",
     "Reservation",
+    "normalise_plate",
 ]

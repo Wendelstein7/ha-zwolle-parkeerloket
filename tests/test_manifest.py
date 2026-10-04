@@ -7,6 +7,10 @@ import re
 import tomllib
 from pathlib import Path
 
+import yaml
+
+from custom_components.zwolle_parkeerloket import services as service_module
+
 REPO_ROOT = Path(__file__).parents[1]
 COMPONENT_DIR = REPO_ROOT / "custom_components" / "zwolle_parkeerloket"
 
@@ -99,3 +103,64 @@ def test_every_entity_used_in_code_is_translated() -> None:
         assert used <= translated[platform], (
             f"{module} uses untranslated keys: {used - translated[platform]}"
         )
+
+
+def test_every_action_is_described_and_translated() -> None:
+    """Each service the code registers has a services.yaml entry and translations.
+
+    This mirrors what hassfest checks for service actions, which cannot be run
+    locally because it is only distributed as a Docker image.
+    """
+    registered = {
+        service_module.SERVICE_START_BOOKING,
+        service_module.SERVICE_STOP_BOOKING,
+        service_module.SERVICE_CHANGE_BOOKING_TIME,
+    }
+    described = yaml.safe_load(
+        (COMPONENT_DIR / "services.yaml").read_text(encoding="utf-8")
+    )
+    strings = json.loads((COMPONENT_DIR / "strings.json").read_text(encoding="utf-8"))
+    dutch = json.loads(
+        (COMPONENT_DIR / "translations" / "nl.json").read_text(encoding="utf-8")
+    )
+
+    assert registered == set(described), "services.yaml and the code disagree"
+    assert registered == set(strings["services"]), "strings.json is missing an action"
+    assert registered == set(dutch["services"]), "nl.json is missing an action"
+
+    for name in sorted(registered):
+        # An action without fields legitimately has no "fields" key at all.
+        fields = set(described[name].get("fields") or {})
+        described_in_strings = set(strings["services"][name].get("fields") or {})
+        assert fields == described_in_strings, (
+            f"{name}: services.yaml and strings.json describe different fields"
+        )
+
+
+def test_every_action_has_a_name_and_description() -> None:
+    """An action without a description is invisible in the UI."""
+    strings = json.loads((COMPONENT_DIR / "strings.json").read_text(encoding="utf-8"))
+
+    for name, service in strings["services"].items():
+        assert service.get("name"), f"{name} has no name"
+        assert service.get("description"), f"{name} has no description"
+        for field, described in (service.get("fields") or {}).items():
+            assert described.get("name"), f"{name}.{field} has no name"
+            assert described.get("description"), f"{name}.{field} has no description"
+
+
+def test_exception_keys_used_in_code_are_translated() -> None:
+    """Every exception the code can raise has a translation to show the user."""
+    strings = json.loads((COMPONENT_DIR / "strings.json").read_text(encoding="utf-8"))
+    translated = set(strings["exceptions"])
+
+    used: set[str] = set()
+    for module in COMPONENT_DIR.glob("*.py"):
+        used |= set(
+            re.findall(
+                r'translation_key="([a-z_]+)"', module.read_text(encoding="utf-8")
+            )
+        )
+
+    assert used, "no translated exceptions found, which cannot be right"
+    assert used <= translated, f"untranslated exceptions: {sorted(used - translated)}"

@@ -60,6 +60,90 @@
       "parking_active": {
         "name": "Parkeren actief"
       }
+    },
+    "button": {
+      "book_now": {
+        "name": "Nu boeken"
+      },
+      "stop_booking": {
+        "name": "Boeking stoppen"
+      },
+      "extend_time": {
+        "name": "Verleng met 30 minuten"
+      },
+      "shorten_time": {
+        "name": "Verkort met 30 minuten"
+      }
+    },
+    "text": {
+      "plate_draft": {
+        "name": "Kenteken om te boeken"
+      }
+    }
+  },
+  "services": {
+    "start_booking": {
+      "name": "Start boeking",
+      "description": "Boek een parkeersessie die nu begint, voor de standaardduur van het portaal.",
+      "fields": {
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Te boeken kenteken. Standaard het kenteken in het kentekenveld, of het al geboekte kenteken."
+        },
+        "force": {
+          "name": "Forceren",
+          "description": "Boek toch terwijl er al een reservering is. Het portaal staat er maar één tegelijk toe, en elke boeking kost tegoed."
+        }
+      }
+    },
+    "stop_booking": {
+      "name": "Stop boeking",
+      "description": "Annuleer de huidige parkeersessie en stort de ongebruikte minuten terug."
+    },
+    "change_booking_time": {
+      "name": "Boekingstijd wijzigen",
+      "description": "Verleng of verkort de huidige parkeersessie.",
+      "fields": {
+        "minutes": {
+          "name": "Minuten",
+          "description": "Minuten erbij, of een negatief aantal minuten eraf. Verlengen kost tegoed; verkorten stort terug."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_target": {
+      "message": "Kies het parkeeraccount waarop de actie moet worden uitgevoerd."
+    },
+    "no_booking": {
+      "message": "Er is geen parkeersessie om te wijzigen."
+    },
+    "plate_required": {
+      "message": "Geen kenteken om te boeken. Vul het kentekenveld in of geef license_plate mee."
+    },
+    "invalid_plate": {
+      "message": "{plate} is geen geldig kenteken."
+    },
+    "booking_already_exists": {
+      "message": "Er loopt al een parkeersessie. Nog een boeking kost tegoed; annuleer eerst, of geef force mee om toch te boeken."
+    },
+    "cannot_extend": {
+      "message": "Deze sessie kan niet met {minutes} minuten worden verlengd. Hij eindigt al om {until}, wat het portaal maximaal toestaat."
+    },
+    "cannot_shorten": {
+      "message": "Deze sessie kan niet met {minutes} minuten worden verkort zonder hem te beëindigen."
+    },
+    "reservation_rejected_time": {
+      "message": "Het portaal weigerde de wijziging: {message}"
+    },
+    "plate_not_found": {
+      "message": "Het portaal kent dit kenteken niet."
+    },
+    "portal_rejected": {
+      "message": "Het portaal weigerde het verzoek: {message}"
+    },
+    "cannot_connect_write": {
+      "message": "Kan het Zwolle Parkeerloket niet bereiken; de actie is niet uitgevoerd."
     }
   }
 }

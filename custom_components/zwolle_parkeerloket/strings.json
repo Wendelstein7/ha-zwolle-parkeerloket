@@ -60,6 +60,90 @@
       "parking_active": {
         "name": "Parking active"
       }
+    },
+    "button": {
+      "book_now": {
+        "name": "Book now"
+      },
+      "stop_booking": {
+        "name": "Stop booking"
+      },
+      "extend_time": {
+        "name": "Extend by 30 minutes"
+      },
+      "shorten_time": {
+        "name": "Shorten by 30 minutes"
+      }
+    },
+    "text": {
+      "plate_draft": {
+        "name": "Licence plate to book"
+      }
+    }
+  },
+  "services": {
+    "start_booking": {
+      "name": "Start booking",
+      "description": "Book a parking session starting now, for the portal's default duration.",
+      "fields": {
+        "license_plate": {
+          "name": "Licence plate",
+          "description": "Plate to book. Defaults to the plate in the licence plate field, or the one already booked."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Book even though a reservation already exists. The portal allows only one at a time, and each booking costs balance."
+        }
+      }
+    },
+    "stop_booking": {
+      "name": "Stop booking",
+      "description": "Cancel the current parking session, refunding the unused minutes."
+    },
+    "change_booking_time": {
+      "name": "Change booking time",
+      "description": "Extend or shorten the current parking session.",
+      "fields": {
+        "minutes": {
+          "name": "Minutes",
+          "description": "Minutes to add, or a negative number of minutes to take away. Extending spends balance; shortening refunds it."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "no_target": {
+      "message": "Select the parking account to act on."
+    },
+    "no_booking": {
+      "message": "There is no parking session to act on."
+    },
+    "plate_required": {
+      "message": "No licence plate to book. Fill in the licence plate field, or pass license_plate."
+    },
+    "invalid_plate": {
+      "message": "{plate} is not a valid licence plate."
+    },
+    "booking_already_exists": {
+      "message": "A parking session already exists. Booking another costs balance; cancel it first, or pass force to book anyway."
+    },
+    "cannot_extend": {
+      "message": "This session cannot be extended by {minutes} minutes. It already ends at {until}, which is as far as the portal allows."
+    },
+    "cannot_shorten": {
+      "message": "This session cannot be shortened by {minutes} minutes without ending it."
+    },
+    "reservation_rejected_time": {
+      "message": "The portal rejected the change: {message}"
+    },
+    "plate_not_found": {
+      "message": "The portal does not know this licence plate."
+    },
+    "portal_rejected": {
+      "message": "The portal rejected the request: {message}"
+    },
+    "cannot_connect_write": {
+      "message": "Could not reach the Zwolle Parkeerloket; the action was not applied."
     }
   }
 }

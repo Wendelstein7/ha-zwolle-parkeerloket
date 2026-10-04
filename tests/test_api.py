@@ -240,3 +240,149 @@ async def test_cookies_are_kept_in_the_injected_session(
     assert SESSION_COOKIE in cookies
     assert XSRF_COOKIE in cookies
     assert XSRF_HEADER == "X-XSRF-TOKEN"
+
+
+# --- booking actions ---------------------------------------------------------
+
+
+@pytest.fixture
+def empty_portal(fake_portal: FakePortal) -> FakePortal:
+    """Start from an account with nothing booked.
+
+    The default fixture mirrors a live account that already has a reservation, so
+    the write tests clear it to keep their expectations about *their own* booking
+    unambiguous.
+    """
+    fake_portal.media["ActiveReservations"].clear()
+    return fake_portal
+
+
+async def test_create_reservation_sends_the_documented_body(
+    client: DVSPortalClient, fake_portal: FakePortal
+) -> None:
+    """The booking body must match the one the portal's own web app sends."""
+    await client.async_login()
+    await client.async_create_reservation(MELDNUMMER, "AA11BB", "Visitor one")
+
+    body = fake_portal.writes_to(fake_portal.create_path)[0]
+    assert body["permitMediaTypeID"] == 9
+    assert body["permitMediaCode"] == MELDNUMMER
+    assert body["LicensePlate"] == {"Value": "AA11BB", "Name": "Visitor one"}
+    # The dates are omitted on purpose: the portal then books from now for its own
+    # default duration, and an explicit start of "now" could be rejected as past.
+    assert "DateFrom" not in body
+    assert "DateUntil" not in body
+
+
+async def test_create_reservation_returns_the_updated_permit(
+    client: DVSPortalClient, empty_portal: FakePortal
+) -> None:
+    """A write answers with the updated permit, so no extra poll is needed."""
+    await client.async_login()
+
+    response = await client.async_create_reservation(MELDNUMMER, "AA11BB")
+
+    assert "Permit" in response
+    reservations = response["Permit"]["PermitMedias"][0]["ActiveReservations"]
+    assert [item["LicensePlate"]["Value"] for item in reservations] == ["AA11BB"]
+
+
+async def test_create_reservation_rejection_raises_api_error(
+    client: DVSPortalClient, fake_portal: FakePortal
+) -> None:
+    """A rejected booking is an error even though the portal answers HTTP 200."""
+    await client.async_login()
+    fake_portal.create_rejection = load_fixture("business_error.json")
+
+    with pytest.raises(ApiError) as err:
+        await client.async_create_reservation(MELDNUMMER, "AA11BB")
+
+    assert err.value.result == 13
+    assert "starttijd" in str(err.value)
+
+
+async def test_update_reservation_sends_a_signed_delta(
+    client: DVSPortalClient, fake_portal: FakePortal, empty_portal: FakePortal
+) -> None:
+    """Extending and shortening are both a signed Minutes delta."""
+    await client.async_login()
+    created = await client.async_create_reservation(MELDNUMMER, "AA11BB")
+    reservation_id = created["Permit"]["PermitMedias"][0]["ActiveReservations"][0][
+        "ReservationID"
+    ]
+
+    await client.async_update_reservation(MELDNUMMER, reservation_id, 30)
+    await client.async_update_reservation(MELDNUMMER, reservation_id, -30)
+
+    first, second = fake_portal.writes_to(fake_portal.update_path)
+    assert first["Minutes"] == 30
+    assert second["Minutes"] == -30
+    assert first["ReservationID"] == reservation_id
+    assert first["permitMediaTypeID"] == 9
+    assert first["permitMediaCode"] == MELDNUMMER
+
+
+async def test_update_reservation_rejection_raises_api_error(
+    client: DVSPortalClient, fake_portal: FakePortal, empty_portal: FakePortal
+) -> None:
+    """The portal's own rejection of a change surfaces as an error."""
+    await client.async_login()
+    created = await client.async_create_reservation(MELDNUMMER, "AA11BB")
+    reservation_id = created["Permit"]["PermitMedias"][0]["ActiveReservations"][0][
+        "ReservationID"
+    ]
+    fake_portal.update_rejection = load_fixture("business_error.json")
+
+    with pytest.raises(ApiError) as err:
+        await client.async_update_reservation(MELDNUMMER, reservation_id, -600)
+
+    assert err.value.result == 13
+
+
+async def test_end_reservation_sends_the_id(
+    client: DVSPortalClient, fake_portal: FakePortal, empty_portal: FakePortal
+) -> None:
+    """Cancelling only needs the reservation id and the permit medium."""
+    await client.async_login()
+    created = await client.async_create_reservation(MELDNUMMER, "AA11BB")
+    reservation_id = created["Permit"]["PermitMedias"][0]["ActiveReservations"][0][
+        "ReservationID"
+    ]
+
+    response = await client.async_end_reservation(MELDNUMMER, reservation_id)
+
+    assert fake_portal.writes_to(fake_portal.end_path) == [
+        {
+            "ReservationID": reservation_id,
+            "permitMediaTypeID": 9,
+            "permitMediaCode": MELDNUMMER,
+        }
+    ]
+    assert response["Permit"]["PermitMedias"][0]["ActiveReservations"] == []
+
+
+async def test_writes_reuse_a_session_that_expired(
+    client: DVSPortalClient, fake_portal: FakePortal, empty_portal: FakePortal
+) -> None:
+    """A write after a session timeout logs in again and still succeeds."""
+    await client.async_login()
+    fake_portal.expire_sessions()
+
+    response = await client.async_create_reservation(MELDNUMMER, "AA11BB")
+
+    assert fake_portal.login_calls == 2
+    assert response["Permit"]["PermitMedias"][0]["ActiveReservations"]
+
+
+async def test_write_against_a_dead_session_fails(
+    client: DVSPortalClient, fake_portal: FakePortal, empty_portal: FakePortal
+) -> None:
+    """When the retry cannot recover either, the failure is reported, not looped."""
+    await client.async_login()
+    fake_portal.expire_sessions()
+    fake_portal.login_rejection = load_fixture("login_rejected.json")
+
+    with pytest.raises(InvalidAuth):
+        await client.async_create_reservation(MELDNUMMER, "AA11BB")
+
+    assert fake_portal.login_calls == 2

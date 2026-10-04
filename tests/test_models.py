@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import pytest
 
 from custom_components.zwolle_parkeerloket.models import (
     Account,
     LicensePlate,
     PermitMedia,
     Reservation,
+    normalise_plate,
 )
 
 MOMENT = datetime(2026, 10, 5, 8, 15, tzinfo=UTC)
@@ -272,3 +275,196 @@ def test_multiple_permits_are_flattened() -> None:
         ("11111", "ZONE1"),
         ("22222", "CENTRUM"),
     ]
+
+
+# --- licence plates ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("AA11BB", "AA11BB"),
+        ("aa-11-bb", "AA11BB"),
+        (" aa 11 bb ", "AA11BB"),
+        ("aa11bb", "AA11BB"),
+        ("1-ABC-12", "1ABC12"),
+    ],
+)
+def test_normalise_plate(typed: str, expected: str) -> None:
+    """Plates are uppercased and stripped of separators, as the API expects."""
+    assert normalise_plate(typed) == expected
+
+
+@pytest.mark.parametrize("typed", ["", "!!", "A", "TOOLONGPLATE1"])
+def test_normalise_plate_rejects_nonsense(typed: str) -> None:
+    """Anything that cannot be a plate is rejected before it reaches the portal."""
+    with pytest.raises(ValueError):
+        normalise_plate(typed)
+
+
+# --- booking constraints ----------------------------------------------------
+
+
+def _media(**overrides: Any) -> PermitMedia:
+    """Return a permit medium with one reservation covering 08:00-08:30 UTC."""
+    defaults: dict[str, Any] = {
+        "type_id": 9,
+        "code": "12345",
+        "balance": 7200,
+        "reservations": (_reservation(),),
+    }
+    defaults.update(overrides)
+    return PermitMedia(**defaults)
+
+
+def test_block_times_give_the_bookable_horizon(account_payload: dict[str, Any]) -> None:
+    """The end of the last block is how far the portal allows booking."""
+    payload = account_payload
+    payload["Permits"][0]["BlockTimes"] = [
+        {"ValidUntil": "2026-10-10T20:00:00Z"},
+        {"ValidUntil": "2026-12-03T23:00:00Z"},
+        {"ValidUntil": "2026-11-01T20:00:00Z"},
+    ]
+
+    media = Account.from_json(payload).media[0]
+
+    assert media.max_bookable_end == datetime(2026, 12, 3, 23, 0, tzinfo=UTC)
+
+
+def test_missing_block_times_leave_the_horizon_unknown() -> None:
+    """Without a published calendar the portal is left to judge."""
+    media = Account.from_json({"Permits": [{"PermitMedias": [{"TypeID": 9}]}]}).media[0]
+
+    assert media.max_bookable_end is None
+    assert media.extension_room(_reservation()) is None
+
+
+def test_extension_room_is_the_distance_to_the_horizon() -> None:
+    """Room is measured from the end of the reservation to the horizon."""
+    media = _media(max_bookable_end=datetime(2026, 10, 5, 9, 0, tzinfo=UTC))
+
+    assert media.extension_room(_reservation()) == timedelta(minutes=30)
+
+
+def test_extension_room_never_goes_negative() -> None:
+    """A reservation already past the horizon has no room left."""
+    media = _media(max_bookable_end=datetime(2026, 10, 5, 8, 0, tzinfo=UTC))
+
+    assert media.extension_room(_reservation()) == timedelta(0)
+
+
+def test_restricted_reservations_cannot_be_extended() -> None:
+    """The portal names the reservations it refuses to prolong."""
+    reservation = _reservation()
+    media = _media(restricted_prolong_ids=frozenset({reservation.reservation_id}))
+
+    assert media.prolong_is_restricted(reservation) is True
+    assert media.can_change_by(reservation, 30, MOMENT) is False
+    # Shortening is still allowed: only prolonging is restricted.
+    assert media.can_change_by(reservation, -10, MOMENT) is True
+
+
+def test_shortening_may_not_move_the_end_into_the_past() -> None:
+    """This is the same rule the portal's own web app applies."""
+    media = _media()
+    reservation = _reservation()
+
+    # Ends 08:30, now 08:15: ten minutes still leaves it in the future.
+    assert media.can_change_by(reservation, -10, MOMENT) is True
+    # Thirty would end it at 08:00, which is behind us.
+    assert media.can_change_by(reservation, -30, MOMENT) is False
+    assert media.can_change_by(reservation, -15, MOMENT) is False
+    # Exactly now counts as the past: a zero-length booking makes no sense.
+    assert (
+        media.can_change_by(reservation, -15, datetime(2026, 10, 5, 8, 15, tzinfo=UTC))
+        is False
+    )
+
+
+def test_extension_is_limited_by_the_horizon() -> None:
+    """Extending past the published window is refused rather than attempted."""
+    media = _media(max_bookable_end=datetime(2026, 10, 5, 8, 40, tzinfo=UTC))
+    reservation = _reservation()
+
+    assert media.can_change_by(reservation, 10, MOMENT) is True
+    assert media.can_change_by(reservation, 30, MOMENT) is False
+
+
+def test_a_change_of_zero_is_never_useful() -> None:
+    """Asking for no change at all is not an action."""
+    assert _media().can_change_by(_reservation(), 0, MOMENT) is False
+
+
+# --- merging a write response ------------------------------------------------
+
+
+def _permit_response(**media_overrides: Any) -> dict[str, Any]:
+    """Return a write response wrapping a single permit."""
+    media: dict[str, Any] = {
+        "TypeID": 9,
+        "Code": "12345",
+        "Balance": 7140,
+        "ActiveReservations": [],
+        "LicensePlates": [],
+    }
+    media.update(media_overrides)
+    return {"Permit": {"Code": None, "ZoneCode": "ZONE1", "PermitMedias": [media]}}
+
+
+def test_merge_replaces_the_media_of_the_write_response(
+    account_payload: dict[str, Any],
+) -> None:
+    """The fresh balance and reservations from a write replace the cached ones."""
+    account = Account.from_json(account_payload)
+
+    merged = account.merged_with_permit(
+        _permit_response(Balance=6000, ActiveReservations=[])
+    )
+
+    media = merged.media[0]
+    assert media.balance == 6000
+    assert media.reservations == ()
+    assert merged.name == account.name
+
+
+def test_merge_keeps_saved_plates_the_response_omits(
+    account_payload: dict[str, Any],
+) -> None:
+    """Booking does not change the saved plates, so they must survive the merge."""
+    account = Account.from_json(account_payload)
+    assert account.media[0].license_plates
+
+    merged = account.merged_with_permit(_permit_response())
+
+    assert merged.media[0].license_plates == account.media[0].license_plates
+
+
+def test_merge_keeps_the_zone_and_horizon_when_absent() -> None:
+    """Metadata the response leaves out is inherited rather than lost."""
+    account = Account.from_json(
+        {
+            "Permits": [
+                {
+                    "ZoneCode": "ZONE1",
+                    "BlockTimes": [{"ValidUntil": "2026-12-03T23:00:00Z"}],
+                    "PermitMedias": [{"TypeID": 9, "Code": "12345", "Balance": 7200}],
+                }
+            ]
+        }
+    )
+
+    merged = account.merged_with_permit(
+        {"Permit": {"PermitMedias": [{"TypeID": 9, "Code": "12345", "Balance": 10}]}}
+    )
+
+    media = merged.media[0]
+    assert media.zone_code == "ZONE1"
+    assert media.max_bookable_end == datetime(2026, 12, 3, 23, 0, tzinfo=UTC)
+
+
+def test_merge_accepts_a_full_model_response(account_payload: dict[str, Any]) -> None:
+    """A response carrying the whole model instead of one permit is used as-is."""
+    merged = Account.from_json(account_payload).merged_with_permit(account_payload)
+
+    assert merged.media[0].balance == 7140
+    assert len(merged.media[0].reservations) == 1

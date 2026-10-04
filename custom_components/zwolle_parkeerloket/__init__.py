@@ -8,11 +8,29 @@ from __future__ import annotations
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .client import async_create_client
 from .coordinator import ZwolleParkeerloketConfigEntry, ZwolleParkeerloketCoordinator
+from .services import async_setup_services
 
-PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.SENSOR,
+    Platform.TEXT,
+]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration's service actions.
+
+    The actions act on the account rather than on one entity, so they are
+    registered on the domain. Doing it here rather than during platform setup
+    keeps them available even if a platform fails to load.
+    """
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(

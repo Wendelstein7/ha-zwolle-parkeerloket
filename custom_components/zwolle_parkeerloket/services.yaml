@@ -1,0 +1,33 @@
+start_booking:
+  target:
+    entity:
+      integration: zwolle_parkeerloket
+  fields:
+    license_plate:
+      required: false
+      selector:
+        text:
+    force:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+stop_booking:
+  target:
+    entity:
+      integration: zwolle_parkeerloket
+
+change_booking_time:
+  target:
+    entity:
+      integration: zwolle_parkeerloket
+  fields:
+    minutes:
+      required: true
+      selector:
+        number:
+          min: -1440
+          max: 1440
+          unit_of_measurement: min
+          mode: box

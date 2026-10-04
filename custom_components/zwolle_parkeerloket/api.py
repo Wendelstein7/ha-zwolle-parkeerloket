@@ -34,6 +34,13 @@ XSRF_HEADER: Final = "X-XSRF-TOKEN"
 # The Meldnummer tab of the portal's login form.
 LOGIN_METHOD_MELDNUMMER: Final = 2
 
+# Business errors the portal reports in its response body. Its own web app shows
+# the accompanying ErrorMessage to the user; we use the code to pick a message of
+# our own where we can say something more useful.
+RESULT_START_IN_PAST: Final = 13
+RESULT_END_IN_PAST: Final = 16
+RESULT_PLATE_NOT_FOUND: Final = 33
+
 
 class DVSPortalError(Exception):
     """Base class for every error raised by this client."""
@@ -149,6 +156,95 @@ class DVSPortalClient:
         _raise_for_error_message(data)
         return Account.from_json(data)
 
+    async def async_create_reservation(
+        self,
+        permit_media_code: str,
+        license_plate: str,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Book a parking session starting now, for the portal's own default duration.
+
+        ``DateFrom`` and ``DateUntil`` are deliberately left out. The portal then
+        books from the current moment for ``ReservationDuration`` (60 minutes for
+        this account). Sending an explicit start of "now" would race: the portal
+        rejects a start that has become the past by the time it is processed.
+        A different duration is reached by adjusting the reservation afterwards,
+        which is the only thing the API offers anyway.
+
+        Returns:
+            The response body, which wraps the updated permit.
+
+        Raises:
+            ApiError: the portal rejected the booking, carrying its ``result`` code.
+            InvalidAuth, CannotConnect: as described on :meth:`async_get_account`.
+        """
+        return await self._async_write(
+            "reservation/create",
+            {
+                "LicensePlate": {"Value": license_plate, "Name": name},
+                "permitMediaTypeID": self._permit_media_type_id,
+                "permitMediaCode": permit_media_code,
+            },
+        )
+
+    async def async_update_reservation(
+        self, permit_media_code: str, reservation_id: int, minutes: int
+    ) -> dict[str, Any]:
+        """Change how long a reservation lasts, by a number of minutes.
+
+        Positive values extend the reservation and debit the extra minutes,
+        negative values shorten it and refund the difference. The portal adjusts
+        by a delta only: the window and the licence plate of a reservation cannot
+        be changed in place.
+
+        Returns:
+            The response body, which wraps the updated permit.
+
+        Raises:
+            ApiError: the portal rejected the change, carrying its ``result`` code.
+            InvalidAuth, CannotConnect: as described on :meth:`async_get_account`.
+        """
+        return await self._async_write(
+            "reservation/update",
+            {
+                "Minutes": minutes,
+                "ReservationID": reservation_id,
+                "permitMediaTypeID": self._permit_media_type_id,
+                "permitMediaCode": permit_media_code,
+            },
+        )
+
+    async def async_end_reservation(
+        self, permit_media_code: str, reservation_id: int
+    ) -> dict[str, Any]:
+        """Cancel a reservation, refunding the minutes it had not used.
+
+        Returns:
+            The response body, which wraps the updated permit.
+
+        Raises:
+            ApiError: the portal rejected the cancellation, carrying its ``result`` code.
+            InvalidAuth, CannotConnect: as described on :meth:`async_get_account`.
+        """
+        return await self._async_write(
+            "reservation/end",
+            {
+                "ReservationID": reservation_id,
+                "permitMediaTypeID": self._permit_media_type_id,
+                "permitMediaCode": permit_media_code,
+            },
+        )
+
+    async def _async_write(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST a change to the portal, turning its business errors into exceptions.
+
+        The portal answers a rejected change with HTTP 200 and an ``ErrorMessage``
+        body, so a bare status check would report failures as successes.
+        """
+        data = await self._async_post(path, payload, allow_reauth=True)
+        _raise_for_error_message(data)
+        return data
+
     async def _async_post(
         self,
         path: str,
@@ -221,6 +317,9 @@ class DVSPortalClient:
 
 
 __all__ = [
+    "RESULT_END_IN_PAST",
+    "RESULT_PLATE_NOT_FOUND",
+    "RESULT_START_IN_PAST",
     "SESSION_COOKIE",
     "XSRF_COOKIE",
     "XSRF_HEADER",

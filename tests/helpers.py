@@ -57,3 +57,57 @@ def entity_id_for(hass: HomeAssistant, platform: str, key: str) -> str | None:
     """Return the entity id of one of our entities, looked up by its unique id."""
     registry = er.async_get(hass)
     return registry.async_get_entity_id(platform, DOMAIN, f"{MELDNUMMER}_{key}")
+
+
+def build_account_payload(
+    *,
+    balance: int = 7140,
+    reservation: tuple[str, str] | None = None,
+    plate: str = "AA11BB",
+    restricted_prolong: bool = False,
+    horizon: str | None = None,
+) -> dict[str, Any]:
+    """Return an account payload with the state a test needs.
+
+    ``reservation`` is a ``(ValidFrom, ValidUntil)`` pair, omitted for an account
+    with nothing booked. ``restricted_prolong`` marks that reservation as one the
+    portal refuses to extend, and ``horizon`` adds the bookable window the portal
+    publishes as ``BlockTimes``.
+    """
+    payload = load_fixture("account_active_reservation.json")
+    permit = payload["Permits"][0]
+    media = permit["PermitMedias"][0]
+
+    media["Balance"] = balance
+    media["Code"] = MELDNUMMER
+    media["ActiveReservations"] = []
+    if reservation is not None:
+        start, end = reservation
+        media["ActiveReservations"].append(
+            {
+                "ReservationID": 555001,
+                "ValidFrom": start,
+                "ValidUntil": end,
+                "LicensePlate": {
+                    "IsCleared": False,
+                    "IsAnonymised": False,
+                    "DisplayValue": plate,
+                    "Value": plate,
+                    "Name": None,
+                },
+                "Units": 30,
+                "PermitMediaCode": MELDNUMMER,
+            }
+        )
+    media["RestrictedProlongReservationIDs"] = [555001] if restricted_prolong else []
+    permit["BlockTimes"] = (
+        [{"ValidFrom": "2026-10-04T00:00:00Z", "ValidUntil": horizon}]
+        if horizon is not None
+        else []
+    )
+    return payload
+
+
+def as_write_response(payload: dict[str, Any]) -> dict[str, Any]:
+    """Wrap an account payload the way the portal answers a write: one permit."""
+    return {"Permit": payload["Permits"][0]}

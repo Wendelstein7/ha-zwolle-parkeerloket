@@ -7,6 +7,13 @@ The portal manages a parking permit, and the same account can be used to park a 
 or your own. The integration reports what is parked, for which plate, from when until when, and
 how much balance is left — and can book, extend or cancel it.
 
+[![release](https://img.shields.io/github/v/release/Wendelstein7/ha-zwolle-parkeerloket?style=flat-square)](https://github.com/Wendelstein7/ha-zwolle-parkeerloket/releases)
+[![license](https://img.shields.io/github/license/Wendelstein7/ha-zwolle-parkeerloket?style=flat-square)](LICENSE)
+[![HACS validation](https://img.shields.io/github/actions/workflow/status/Wendelstein7/ha-zwolle-parkeerloket/validate-hacs.yml?style=flat-square&label=HACS%20validation)](https://github.com/Wendelstein7/ha-zwolle-parkeerloket/actions/workflows/validate-hacs.yml)
+[![hassfest](https://img.shields.io/github/actions/workflow/status/Wendelstein7/ha-zwolle-parkeerloket/hassfest.yml?style=flat-square&label=hassfest)](https://github.com/Wendelstein7/ha-zwolle-parkeerloket/actions/workflows/hassfest.yml)
+[![test](https://img.shields.io/github/actions/workflow/status/Wendelstein7/ha-zwolle-parkeerloket/test.yml?style=flat-square&label=test)](https://github.com/Wendelstein7/ha-zwolle-parkeerloket/actions/workflows/test.yml)
+[![lint](https://img.shields.io/github/actions/workflow/status/Wendelstein7/ha-zwolle-parkeerloket/lint.yml?style=flat-square&label=lint)](https://github.com/Wendelstein7/ha-zwolle-parkeerloket/actions/workflows/lint.yml)
+
 > [!IMPORTANT]
 > This integration talks to an **unofficial, undocumented** API. It was reverse engineered
 > from the portal's own web app and can break at any time without notice. It is not
@@ -148,10 +155,10 @@ directory and restart Home Assistant.
 
 ## Configuration
 
-1. Go to **Settings → Devices & services → Add integration**.
-2. Search for **Zwolle Parkeerloket**.
-3. Enter the **Meldnummer** and **Pincode** printed on your parking permit, or supplied by
-   the municipality.
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=zwolle_parkeerloket)
+
+Or do it by hand: **Settings → Devices & services → Add integration**, search for **Zwolle
+Parkeerloket**, and enter the **Meldnummer** and **Pincode** printed on your parking permit.
 
 The credentials are stored by Home Assistant in its own configuration storage and are only
 sent to the Zwolle portal. They are never sent anywhere else.

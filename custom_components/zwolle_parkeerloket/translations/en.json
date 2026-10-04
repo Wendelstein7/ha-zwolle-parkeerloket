@@ -1,0 +1,65 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the Zwolle Parkeerloket",
+        "description": "Enter the Meldnummer and Pincode of your visitor-parking permit.",
+        "data": {
+          "meldnummer": "Meldnummer",
+          "pincode": "Pincode"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate",
+        "description": "The credentials for Meldnummer {meldnummer} are no longer accepted. Enter the current Pincode.",
+        "data": {
+          "pincode": "Pincode"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "The Meldnummer or Pincode is incorrect.",
+      "cannot_connect": "Failed to connect to the Zwolle Parkeerloket.",
+      "unknown": "Unexpected error while talking to the Zwolle Parkeerloket."
+    },
+    "abort": {
+      "already_configured": "This Meldnummer is already configured.",
+      "reauth_successful": "Reauthentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "The portal is a shared production system, so keep the polling interval generous.",
+        "data": {
+          "scan_interval": "Polling interval"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance": {
+        "name": "Balance"
+      },
+      "plate": {
+        "name": "Licence plate"
+      },
+      "start": {
+        "name": "Parking start"
+      },
+      "end": {
+        "name": "Parking end"
+      },
+      "zone": {
+        "name": "Zone"
+      }
+    },
+    "binary_sensor": {
+      "parking_active": {
+        "name": "Parking active"
+      }
+    }
+  }
+}

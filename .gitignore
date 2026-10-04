@@ -1,0 +1,28 @@
+# Local secrets — never commit these.
+*.local.*
+.env
+.env.*
+
+# Local Home Assistant instance used for development (contains .storage, secrets, DB).
+config/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

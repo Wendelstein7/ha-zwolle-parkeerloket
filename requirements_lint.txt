@@ -1,0 +1,2 @@
+# Tooling for linting and formatting only.
+ruff==0.16.10

@@ -1,0 +1,58 @@
+{
+  "Name": "",
+  "Permits": [
+    {
+      "Code": null,
+      "Type": null,
+      "TypeCode": null,
+      "ZoneCode": "ZONE1",
+      "UnitFormat": 3,
+      "StartTariff": 0,
+      "ProlongMinutes": 10,
+      "ReservationDuration": 60,
+      "UnitPrice": null,
+      "PermitMedias": [
+        {
+          "TypeID": 9,
+          "Code": "12345",
+          "Balance": 7140,
+          "RestrictedProlongReservationIDs": [],
+          "ActiveReservations": [
+            {
+              "ReservationID": 555001,
+              "ValidFrom": "2026-10-05T08:00:00Z",
+              "ValidUntil": "2026-10-05T08:30:00Z",
+              "LicensePlate": {
+                "IsCleared": false,
+                "IsAnonymised": false,
+                "DisplayValue": "AA-11-BB",
+                "Value": "AA11BB",
+                "Name": null
+              },
+              "Units": 30,
+              "PermitMediaCode": "12345"
+            }
+          ],
+          "LicensePlates": [
+            {
+              "Value": "AA11BB",
+              "Name": "Visitor one",
+              "ValidFrom": "0001-01-01T00:00:00",
+              "ValidUntil": "9999-12-31T23:59:59.9999999"
+            },
+            {
+              "Value": "CC22DD",
+              "Name": "Visitor two",
+              "ValidFrom": "0001-01-01T00:00:00",
+              "ValidUntil": "9999-12-31T23:59:59.9999999"
+            }
+          ],
+          "HasHistory": true,
+          "RemainingUpgrades": null,
+          "RemainingDowngrades": null
+        }
+      ]
+    }
+  ],
+  "Configuration": { "ShowPrivacyInfo": true }
+}

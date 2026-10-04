@@ -1,0 +1,5 @@
+# Test environment, pinned for reproducibility.
+# pytest-homeassistant-custom-component pins the exact Home Assistant release it
+# supports; homeassistant and pytest are listed explicitly for clarity.
+homeassistant==2026.10.0b0
+pytest-homeassistant-custom-component==0.13.368

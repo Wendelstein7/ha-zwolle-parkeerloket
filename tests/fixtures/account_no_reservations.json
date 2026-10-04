@@ -1,0 +1,30 @@
+{
+  "Name": "",
+  "Permits": [
+    {
+      "Code": null,
+      "Type": null,
+      "TypeCode": null,
+      "ZoneCode": "ZONE1",
+      "UnitFormat": 3,
+      "StartTariff": 0,
+      "ProlongMinutes": 10,
+      "ReservationDuration": 60,
+      "UnitPrice": null,
+      "PermitMedias": [
+        {
+          "TypeID": 9,
+          "Code": "12345",
+          "Balance": 7200,
+          "RestrictedProlongReservationIDs": [],
+          "ActiveReservations": [],
+          "LicensePlates": [],
+          "HasHistory": true,
+          "RemainingUpgrades": null,
+          "RemainingDowngrades": null
+        }
+      ]
+    }
+  ],
+  "Configuration": { "ShowPrivacyInfo": true }
+}

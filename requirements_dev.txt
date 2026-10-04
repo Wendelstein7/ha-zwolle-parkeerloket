@@ -1,0 +1,7 @@
+# Extra tooling for local development.
+-r requirements_lint.txt
+-r requirements_test.txt
+
+# Only needed to serve the UI in the local development instance (`hass -c config`).
+# Not needed to run the test suite.
+home-assistant-frontend==20260930.0

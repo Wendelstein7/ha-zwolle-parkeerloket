@@ -22,18 +22,24 @@ SERVICE_STOP_BOOKING = "stop_booking"
 SERVICE_CHANGE_BOOKING_TIME = "change_booking_time"
 
 ATTR_LICENSE_PLATE = "license_plate"
-ATTR_FORCE = "force"
 ATTR_MINUTES = "minutes"
 
+# The plate is required rather than guessed at: the portal keeps several
+# reservations at once, so acting on "the" booking without naming one could
+# cancel the wrong car. Every action names its booking by licence plate.
 START_BOOKING_SCHEMA = cv.make_entity_service_schema(
     {
-        vol.Optional(ATTR_LICENSE_PLATE): vol.All(str, vol.Length(min=4, max=16)),
-        vol.Optional(ATTR_FORCE, default=False): cv.boolean,
+        vol.Required(ATTR_LICENSE_PLATE): vol.All(str, vol.Length(min=4, max=16)),
     }
 )
-STOP_BOOKING_SCHEMA = cv.make_entity_service_schema({})
+STOP_BOOKING_SCHEMA = cv.make_entity_service_schema(
+    {
+        vol.Required(ATTR_LICENSE_PLATE): vol.All(str, vol.Length(min=4, max=16)),
+    }
+)
 CHANGE_BOOKING_TIME_SCHEMA = cv.make_entity_service_schema(
     {
+        vol.Required(ATTR_LICENSE_PLATE): vol.All(str, vol.Length(min=4, max=16)),
         vol.Required(ATTR_MINUTES): vol.All(
             vol.Coerce(int), vol.Range(min=-24 * 60, max=24 * 60)
         ),
@@ -65,21 +71,21 @@ async def _async_coordinators(call: ServiceCall) -> list[ZwolleParkeerloketCoord
 async def _async_start_booking(call: ServiceCall) -> None:
     """Book a parking session starting now."""
     for coordinator in await _async_coordinators(call):
-        await coordinator.async_start_booking(
-            call.data.get(ATTR_LICENSE_PLATE), force=call.data[ATTR_FORCE]
-        )
+        await coordinator.async_start_booking(call.data[ATTR_LICENSE_PLATE])
 
 
 async def _async_stop_booking(call: ServiceCall) -> None:
-    """Cancel the current parking session."""
+    """Cancel the parking session of a licence plate."""
     for coordinator in await _async_coordinators(call):
-        await coordinator.async_stop_booking()
+        await coordinator.async_stop_booking(call.data[ATTR_LICENSE_PLATE])
 
 
 async def _async_change_booking_time(call: ServiceCall) -> None:
-    """Extend or shorten the current parking session."""
+    """Extend or shorten the parking session of a licence plate."""
     for coordinator in await _async_coordinators(call):
-        await coordinator.async_change_booking_time(call.data[ATTR_MINUTES])
+        await coordinator.async_change_booking_time(
+            call.data[ATTR_LICENSE_PLATE], call.data[ATTR_MINUTES]
+        )
 
 
 def async_setup_services(hass: HomeAssistant) -> None:

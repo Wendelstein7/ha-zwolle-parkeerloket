@@ -106,8 +106,13 @@ class ZwolleParkeerloketPlateText(ZwolleParkeerloketEntity, RestoreText):
 
     @property
     def _remote_plate(self) -> str | None:
-        """Return the plate the portal reports for the current reservation."""
-        reservation = self.coordinator.current_reservation
+        """Return the plate of the booking the entities follow.
+
+        That is the car whose session ends soonest, which is the booking the plate
+        sensor reports. With several cars parked the field deliberately keeps the
+        user's own draft rather than chasing whichever car is closest to leaving.
+        """
+        reservation = self.coordinator.primary_reservation
         if reservation is None or reservation.license_plate is None:
             return None
         return reservation.license_plate.value

@@ -65,6 +65,22 @@ def _as_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _plate_matches(reservation: Reservation, plate: str) -> bool:
+    """Return whether a reservation was made for ``plate``.
+
+    Both sides are normalised, since the plate a user names a booking by may come
+    from an automation as ``aa-11-bb`` while the portal stored ``AA11BB``.
+    """
+    if reservation.license_plate is None or not reservation.license_plate.value:
+        return False
+    try:
+        return normalise_plate(reservation.license_plate.value) == normalise_plate(
+            plate
+        )
+    except ValueError:
+        return False
+
+
 @dataclass(frozen=True, slots=True)
 class LicensePlate:
     """A licence plate, either saved as a favourite or booked on a reservation."""
@@ -180,31 +196,89 @@ class PermitMedia:
             max_bookable_end=max_bookable_end,
         )
 
-    def reservation_covering(self, moment: datetime) -> Reservation | None:
-        """Return the reservation that is active at ``moment``, if any."""
+    def active_reservations(self, moment: datetime) -> tuple[Reservation, ...]:
+        """Return every reservation covering ``moment``, ending soonest first.
+
+        The portal keeps several reservations at once — different plates may be
+        parked over the same period — so this is a list rather than the single
+        reservation this integration used to assume. Ordering by end time puts the
+        one most likely to need attention first.
+        """
+        return tuple(
+            sorted(
+                (
+                    reservation
+                    for reservation in self.reservations
+                    if reservation.covers(moment)
+                ),
+                key=lambda reservation: reservation.valid_until,
+            )
+        )
+
+    def upcoming_reservations(self, moment: datetime) -> tuple[Reservation, ...]:
+        """Return every reservation starting after ``moment``, soonest first."""
+        return tuple(
+            sorted(
+                (
+                    reservation
+                    for reservation in self.reservations
+                    if reservation.valid_from > moment
+                ),
+                key=lambda reservation: reservation.valid_from,
+            )
+        )
+
+    def primary_reservation(self, moment: datetime) -> Reservation | None:
+        """Return the reservation the glanceable entities describe.
+
+        That is the parked car whose session ends soonest, or, when nothing is
+        parked, the soonest upcoming session. Several cars can be parked at once,
+        so this is a choice: it is the one most likely to need the user's
+        attention, and the entities that show it also report how many others there
+        are so the single value cannot mislead.
+        """
+        active = self.active_reservations(moment)
+        if active:
+            return active[0]
+        upcoming = self.upcoming_reservations(moment)
+        return upcoming[0] if upcoming else None
+
+    def reservation_by_id(self, reservation_id: int) -> Reservation | None:
+        """Return the reservation with this id, if the portal still lists it."""
         for reservation in self.reservations:
-            if reservation.covers(moment):
+            if reservation.reservation_id == reservation_id:
                 return reservation
         return None
 
-    def upcoming_reservation(self, moment: datetime) -> Reservation | None:
-        """Return the soonest reservation that starts after ``moment``, if any."""
-        upcoming = [
-            reservation
-            for reservation in self.reservations
-            if reservation.valid_from > moment
-        ]
-        return min(
-            upcoming, key=lambda reservation: reservation.valid_from, default=None
-        )
+    def active_reservation_for_plate(
+        self, plate: str, moment: datetime
+    ) -> Reservation | None:
+        """Return the reservation parking ``plate`` right now, if any."""
+        for reservation in self.active_reservations(moment):
+            if _plate_matches(reservation, plate):
+                return reservation
+        return None
 
-    def current_reservation(self, moment: datetime) -> Reservation | None:
-        """Return the reservation covering ``moment``, else the soonest upcoming one.
+    def reservation_for_plate(self, plate: str, moment: datetime) -> Reservation | None:
+        """Return the reservation that ``plate`` refers to.
 
-        The portal only allows one reservation at a time, but it can be scheduled
-        in the future, in which case there is nothing active right now.
+        A licence plate is how the service actions and the buttons name a booking,
+        since it is what a user knows without looking anything up. The parked
+        reservation wins; otherwise the soonest upcoming one for that plate. The
+        portal refuses overlapping reservations for one plate, so at most one can
+        be parked at a time and this stays unambiguous in practice.
         """
-        return self.reservation_covering(moment) or self.upcoming_reservation(moment)
+        active = self.active_reservation_for_plate(plate, moment)
+        if active is not None:
+            return active
+        return next(
+            (
+                reservation
+                for reservation in self.upcoming_reservations(moment)
+                if _plate_matches(reservation, plate)
+            ),
+            None,
+        )
 
     def prolong_is_restricted(self, reservation: Reservation) -> bool:
         """Return whether the portal refuses to extend this reservation.

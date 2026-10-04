@@ -36,8 +36,9 @@ class ZwolleParkeerloketActiveBinarySensor(
 
     @property
     def is_on(self) -> bool:
-        """Return whether a reservation covers the current moment.
+        """Return whether any reservation covers the current moment.
 
-        A reservation that is only scheduled for the future does not count.
+        Several cars may be parked at once; this is on when at least one is. A
+        reservation that is only scheduled for the future does not count.
         """
-        return self.active_reservation is not None
+        return bool(self.active_reservations)

@@ -20,8 +20,10 @@ from custom_components.zwolle_parkeerloket.const import MANUFACTURER, NAME
 from .helpers import (
     GETBASE_URL,
     LOGIN_URL,
+    build_account_payload,
     entity_id_for,
     load_fixture,
+    reservation_payload,
 )
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -86,9 +88,20 @@ async def test_entities_reflect_an_active_reservation(
     plate = _state(hass, "sensor", "plate")
     assert plate.state == "AA11BB"
     assert plate.attributes["display_value"] == "AA-11-BB"
+    assert plate.attributes["parked"] is True
 
-    assert _state(hass, "sensor", "start").state == START
-    assert _state(hass, "sensor", "end").state == END
+    bookings = _state(hass, "sensor", "bookings")
+    assert bookings.state == "1"
+    assert bookings.attributes["reservations"] == [
+        {
+            "reservation_id": 555001,
+            "license_plate": "AA11BB",
+            "start": START,
+            "end": END,
+            "parked": True,
+            "units": 30,
+        }
+    ]
     assert _state(hass, "binary_sensor", "parking_active").state == "on"
 
 
@@ -98,7 +111,7 @@ async def test_entities_without_any_reservation(
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """Without a reservation the plate and window are unknown and parking is off."""
+    """Without a reservation the plate and the window are unknown and parking is off."""
     freezer.move_to(DURING)
     _mock_portal(aioclient_mock, load_fixture("account_no_reservations.json"))
     await _setup(hass, account_entry)
@@ -106,8 +119,10 @@ async def test_entities_without_any_reservation(
     assert _state(hass, "sensor", "balance").state == "120.0"
     assert _state(hass, "sensor", "plate").state == "unknown"
     assert "display_value" not in _state(hass, "sensor", "plate").attributes
-    assert _state(hass, "sensor", "start").state == "unknown"
-    assert _state(hass, "sensor", "end").state == "unknown"
+
+    bookings = _state(hass, "sensor", "bookings")
+    assert bookings.state == "0"
+    assert bookings.attributes["reservations"] == []
     assert _state(hass, "binary_sensor", "parking_active").state == "off"
 
 
@@ -122,9 +137,49 @@ async def test_entities_with_a_future_reservation(
     _mock_portal(aioclient_mock, _payload(START, END))
     await _setup(hass, account_entry)
 
-    assert _state(hass, "sensor", "plate").state == "AA11BB"
-    assert _state(hass, "sensor", "start").state == START
+    plate = _state(hass, "sensor", "plate")
+    assert plate.state == "AA11BB"
+    assert plate.attributes["parked"] is False, "it has not started yet"
+    assert _state(hass, "sensor", "bookings").state == "0"
     assert _state(hass, "binary_sensor", "parking_active").state == "off"
+
+
+async def test_entities_describe_the_car_that_leaves_first(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+) -> None:
+    """With two cars parked, the single-valued entities describe one of them.
+
+    The plate belongs to the car whose session ends soonest, which is the one most
+    likely to need attention, and the bookings count says how many others there are
+    so a dashboard cannot be misled by the lone value.
+    """
+    freezer.move_to(DURING)
+    leaving_first = reservation_payload(
+        reservation_id=555002,
+        plate="CC22DD",
+        valid_from=START,
+        valid_until="2026-10-05T08:20:00Z",
+    )
+    payload = build_account_payload(
+        reservation=(START, END), also_reserved=[leaving_first]
+    )
+    _mock_portal(aioclient_mock, payload)
+    await _setup(hass, account_entry)
+
+    plate = _state(hass, "sensor", "plate")
+    assert plate.state == "CC22DD"
+    assert plate.attributes["parked"] is True
+
+    bookings = _state(hass, "sensor", "bookings")
+    assert bookings.state == "2"
+    assert [item["license_plate"] for item in bookings.attributes["reservations"]] == [
+        "AA11BB",
+        "CC22DD",
+    ]
+    assert _state(hass, "binary_sensor", "parking_active").state == "on"
 
 
 async def test_parking_active_turns_off_after_the_window(
@@ -209,9 +264,9 @@ async def test_entities_are_grouped_in_one_device(
     assert device.entry_type is DeviceEntryType.SERVICE
     for platform, key in (
         ("sensor", "plate"),
-        ("sensor", "start"),
-        ("sensor", "end"),
+        ("sensor", "bookings"),
         ("binary_sensor", "parking_active"),
+        ("calendar", "calendar"),
     ):
         assert (
             er.async_get(hass).async_get(entity_id_for(hass, platform, key)).device_id

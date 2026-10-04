@@ -84,8 +84,8 @@ def test_reservation_covers_only_its_own_window() -> None:
     assert reservation.covers(datetime(2026, 10, 5, 7, 59, tzinfo=UTC)) is False
 
 
-def test_current_reservation_prefers_the_active_one() -> None:
-    """An active reservation wins over an upcoming one."""
+def test_primary_reservation_is_the_active_one() -> None:
+    """An active reservation wins over one that has not started yet."""
     finished = _reservation(
         reservation_id=1,
         valid_from=datetime(2026, 10, 5, 6, 0, tzinfo=UTC),
@@ -101,11 +101,38 @@ def test_current_reservation_prefers_the_active_one() -> None:
         type_id=9, code="12345", balance=7200, reservations=(finished, active, upcoming)
     )
 
-    assert media.reservation_covering(MOMENT) is active
-    assert media.current_reservation(MOMENT) is active
+    assert media.active_reservations(MOMENT) == (active,)
+    assert media.primary_reservation(MOMENT) is active
 
 
-def test_current_reservation_falls_back_to_the_soonest_upcoming() -> None:
+def test_primary_reservation_prefers_the_car_that_leaves_first() -> None:
+    """With several cars parked, the one ending soonest is the one described.
+
+    It is the booking most likely to need attention, and the entities that show a
+    single reservation report how many others there are alongside it.
+    """
+    leaving_late = _reservation(
+        reservation_id=1,
+        valid_from=datetime(2026, 10, 5, 8, 0, tzinfo=UTC),
+        valid_until=datetime(2026, 10, 5, 9, 0, tzinfo=UTC),
+    )
+    leaving_first = _reservation(
+        reservation_id=2,
+        valid_from=datetime(2026, 10, 5, 8, 0, tzinfo=UTC),
+        valid_until=datetime(2026, 10, 5, 8, 45, tzinfo=UTC),
+    )
+    media = PermitMedia(
+        type_id=9,
+        code="12345",
+        balance=7200,
+        reservations=(leaving_late, leaving_first),
+    )
+
+    assert media.active_reservations(MOMENT) == (leaving_first, leaving_late)
+    assert media.primary_reservation(MOMENT) is leaving_first
+
+
+def test_primary_reservation_falls_back_to_the_soonest_upcoming() -> None:
     """With nothing active, the next booking is used; ended ones are ignored."""
     finished = _reservation(
         reservation_id=1,
@@ -126,8 +153,70 @@ def test_current_reservation_falls_back_to_the_soonest_upcoming() -> None:
         type_id=9, code="12345", balance=7200, reservations=(finished, later, sooner)
     )
 
-    assert media.reservation_covering(MOMENT) is None
-    assert media.current_reservation(MOMENT) is sooner
+    assert media.active_reservations(MOMENT) == ()
+    assert media.upcoming_reservations(MOMENT) == (sooner, later)
+    assert media.primary_reservation(MOMENT) is sooner
+
+
+def test_reservation_for_plate_prefers_the_parked_car() -> None:
+    """A plate names a booking: the parked one, else the soonest upcoming one."""
+    parked = _reservation(reservation_id=2, license_plate=LicensePlate("AA11BB"))
+    later = _reservation(
+        reservation_id=3,
+        license_plate=LicensePlate("AA11BB"),
+        valid_from=datetime(2026, 10, 5, 10, 0, tzinfo=UTC),
+        valid_until=datetime(2026, 10, 5, 10, 30, tzinfo=UTC),
+    )
+    other_car = _reservation(reservation_id=4, license_plate=LicensePlate("CC22DD"))
+    media = PermitMedia(
+        type_id=9,
+        code="12345",
+        balance=7200,
+        reservations=(parked, later, other_car),
+    )
+
+    assert media.reservation_for_plate("AA11BB", MOMENT) is parked
+    assert media.reservation_for_plate("CC22DD", MOMENT) is other_car
+    assert media.reservation_for_plate("XX99YY", MOMENT) is None
+
+
+def test_reservation_for_plate_ignores_separators_and_case() -> None:
+    """A plate is compared the way a person would read it."""
+    media = PermitMedia(
+        type_id=9,
+        code="12345",
+        balance=7200,
+        reservations=(_reservation(license_plate=LicensePlate("AA11BB")),),
+    )
+
+    assert media.reservation_for_plate("aa-11-bb", MOMENT) is not None
+
+
+def test_reservation_for_plate_falls_back_to_an_upcoming_one() -> None:
+    """A plate that is booked but not parked yet still resolves."""
+    later = _reservation(
+        reservation_id=3,
+        license_plate=LicensePlate("AA11BB"),
+        valid_from=datetime(2026, 10, 5, 10, 0, tzinfo=UTC),
+        valid_until=datetime(2026, 10, 5, 10, 30, tzinfo=UTC),
+    )
+    media = PermitMedia(type_id=9, code="12345", balance=7200, reservations=(later,))
+
+    assert media.active_reservation_for_plate("AA11BB", MOMENT) is None
+    assert media.reservation_for_plate("AA11BB", MOMENT) is later
+
+
+def test_reservation_by_id_finds_only_what_is_listed() -> None:
+    """The calendar addresses a booking by its portal id."""
+    media = PermitMedia(
+        type_id=9,
+        code="12345",
+        balance=7200,
+        reservations=(_reservation(reservation_id=77),),
+    )
+
+    assert media.reservation_by_id(77) is not None
+    assert media.reservation_by_id(78) is None
 
 
 def test_no_reservations_at_all() -> None:
@@ -135,7 +224,9 @@ def test_no_reservations_at_all() -> None:
     media = PermitMedia(type_id=9, code="12345", balance=7200)
 
     assert media.reservations == ()
-    assert media.current_reservation(MOMENT) is None
+    assert media.active_reservations(MOMENT) == ()
+    assert media.primary_reservation(MOMENT) is None
+    assert media.reservation_for_plate("AA11BB", MOMENT) is None
 
 
 def test_reservations_without_a_usable_window_are_skipped() -> None:
@@ -286,7 +377,7 @@ def test_multiple_permits_are_flattened() -> None:
         ("AA11BB", "AA11BB"),
         ("aa-11-bb", "AA11BB"),
         (" aa 11 bb ", "AA11BB"),
-        ("aa11bb", "AA11BB"),
+        ("cc22dd", "CC22DD"),
         ("1-ABC-12", "1ABC12"),
     ],
 )

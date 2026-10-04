@@ -14,13 +14,15 @@ extend and shorten a reservation.
 > affiliated with or endorsed by Gemeente Zwolle.
 
 > [!WARNING]
-> Booking and extending **spend balance**, and the portal allows only one reservation at a
-> time. The integration guards against this as much as it reasonably can — see
-> [Actions](#actions) — but a booking you make is a real booking.
+> Booking and extending **spend balance**. The integration guards against booking the same
+> plate twice over the same period — the portal refuses that too — but a booking you make is
+> a real booking. See [Actions](#actions).
 
 ## Features
 
-- Monitoring: balance, the current reservation, its plate and its window.
+- Monitoring: balance, how many cars are parked, and which plates they use.
+- A calendar entity listing every reservation, with cancel and resize from the Calendar
+  panel.
 - Actions: book now, stop, extend and shorten, as buttons and as service actions.
 - Automatic re-login when the portal session expires, and a reauthentication flow if the
   credentials stop working.
@@ -36,20 +38,41 @@ the names below.
 | Entity | Description |
 | --- | --- |
 | Balance | Remaining balance, in minutes (shown as hours in the UI). |
-| Parking active | `on` while a reservation covers the current moment. |
-| Licence plate | Plate of the reservation covering now, or of the next upcoming one. |
-| Parking start | Start of that reservation. |
-| Parking end | End of that reservation. |
+| Parking active | `on` while any reservation covers the current moment. |
+| Bookings | How many cars are parked right now. Every booking and its window is an attribute. |
+| Licence plate | Plate of the car whose session ends soonest, or of the next upcoming one. |
+| Parking calendar | Every reservation as a calendar event. See [Several cars](#several-cars). |
 | Zone | Permit zone (e.g. `ZONE1`). Disabled by default. |
 | Licence plate to book | The plate the book button will use. See [Actions](#actions). |
 | Book now | Book a parking session starting now. |
-| Stop booking | Cancel the current reservation. |
-| Extend by 30 minutes | Add 30 minutes to the current reservation. |
-| Shorten by 30 minutes | Take 30 minutes off the current reservation. |
+| Stop booking | Cancel a parking session. |
+| Extend by 30 minutes | Add 30 minutes to a parking session. |
+| Shorten by 30 minutes | Take 30 minutes off a parking session. |
 
-When no reservation exists at all, the plate sensor is `unknown` and the binary sensor is `off`.
-Each button is `unavailable` when the portal would refuse the action, so the UI says "you
-cannot do that right now" before you find out the hard way.
+When nothing is booked, the plate sensor is `unknown`, the bookings sensor is `0` and the
+binary sensor is `off`. Each button is `unavailable` when the portal would refuse the action,
+so the UI says "you cannot do that right now" before you find out the hard way.
+
+## Several cars
+
+The portal keeps several reservations at once, so more than one car can be parked in the same
+period. Three rules keep that from becoming guesswork:
+
+- **A single-valued entity describes one car.** The licence plate sensor, and the calendar's
+  current event, describe the parked car whose session **ends soonest** — the one most likely
+  to need attention. The bookings sensor counts the rest, and every booking is listed in its
+  attributes, so a dashboard cannot be misled by the one value it shows.
+- **An action always names a licence plate.** `stop_booking` and `change_booking_time` take
+  the plate of the car they should act on, rather than assuming "the" booking. That is what
+  makes them safe in an automation.
+- **A button steps aside when it cannot tell cars apart.** Buttons cannot take an argument,
+  so they only act while exactly one booking is in play. With two cars parked, stop, extend
+  and shorten go `unavailable`; the calendar and the actions above take over. Cancelling
+  whichever car happened to come first would be a coin flip on somebody's session.
+
+For per-car control from the UI, open the **Calendar** panel: each reservation is an event,
+and you can cancel or resize exactly the one you picked. The event's title is the licence
+plate, and its description carries the reservation id and how many minutes it charged.
 
 ## Actions
 
@@ -60,19 +83,19 @@ input and a mirror:
 
 - typing sets the plate that the **Book now** button will book, normalised to the form the
   portal expects (`aa-11-bb` becomes `AA11BB`);
-- when the plate the portal reports **changes** — you booked, or a booking appeared
-  elsewhere — the field snaps to that value, so it always shows what is really booked;
+- when the plate the entities follow **changes** — you booked, or a booking appeared
+  elsewhere — the field snaps to that value, so it reflects what is really booked;
 - a plate you typed is otherwise left alone, and survives restarts, so it is still there
   next time you book.
 
 ### Buttons
 
-| Button | What it does |
-| --- | --- |
-| Book now | Books the plate in the field, starting now, for the portal's own default duration. |
-| Stop booking | Cancels the current reservation, refunding the minutes it had not used. |
-| Extend by 30 minutes | Adds 30 minutes to the current reservation. |
-| Shorten by 30 minutes | Takes 30 minutes off it, if that does not end the session first. |
+| Button | What it does | Available when |
+| --- | --- | --- |
+| Book now | Books the plate in the field, starting now, for the portal's own default duration. | A plate is in the field and it is not parked already. |
+| Stop booking | Cancels the session, refunding the minutes it had not used. | Exactly one car is parked, or exactly one session is booked. |
+| Extend by 30 minutes | Adds 30 minutes to the session. | As above, and the portal allows extending it. |
+| Shorten by 30 minutes | Takes 30 minutes off it. | As above, and it does not end the session first. |
 
 Booking deliberately always creates the portal's default duration rather than a duration you
 pick: sending a start time of "now" can be rejected as being in the past by the time the
@@ -82,19 +105,31 @@ different duration.
 ### Service actions
 
 Available as `zwolle_parkeerloket.<action>`, targeting the parking account (any of its
-entities, or its device).
+entities, or its device). Every one of them requires `license_plate`:
 
 | Action | Fields | Description |
 | --- | --- | --- |
-| `start_booking` | `license_plate`, `force` | Books starting now. Without `license_plate` the plate field is used. |
-| `stop_booking` | — | Cancels the current reservation. |
-| `change_booking_time` | `minutes` | Extends (positive) or shortens (negative) the current reservation. |
+| `start_booking` | `license_plate` | Books that plate starting now. |
+| `stop_booking` | `license_plate` | Cancels the session parking that plate. |
+| `change_booking_time` | `license_plate`, `minutes` | Extends (positive `minutes`) or shortens (negative) the session parking that plate. |
+
+A plate is resolved to the session that is parked now, or, if that car is not parked yet, to
+its soonest upcoming session. The portal still receives a reservation id — the plate is just
+what you write.
+
+```yaml
+action: zwolle_parkeerloket.stop_booking
+target:
+  device_id: 0f1e2d3c4b5a
+data:
+  license_plate: AA11BB
+```
 
 ### Guardrails
 
-- **Only one reservation at a time.** `start_booking` refuses while a reservation exists,
-  because a second booking spends balance. Pass `force: true` if you really mean it, and
-  the **Nu boeken** button is simply unavailable.
+- **One plate cannot park twice.** The portal refuses two overlapping reservations for the
+  same plate, and so does `start_booking`, before spending a round trip on it. Another car is
+  no problem: book it while the first is parked.
 - **Extending is blocked when the portal blocks it.** The portal names the reservations it
   will not prolong; those cannot be extended from here either.
 - **Shortening cannot end a session.** A change that would move the end into the past is
@@ -102,6 +137,9 @@ entities, or its device).
 - **The bookable window is respected.** The portal publishes how far ahead you can book
   (about two months); extending beyond that is refused before asking, with a message
   explaining why.
+- **A booking cannot be moved or re-plated.** The portal only changes how long a reservation
+  lasts, so dragging an event's start in the Calendar panel is refused instead of appearing
+  to work.
 - **Nothing happens by itself.** The integration only acts when you or an automation ask it
   to; polling never books, extends or cancels anything.
 - Unavailable states and error messages aside, the portal has the last word: any rejection it
@@ -148,8 +186,11 @@ default 5).
 | `Invalid authentication` during setup | Wrong Meldnummer/Pincode, or the permit is no longer active. |
 | `Failed to connect` during setup | The portal is unreachable, or is down for maintenance. |
 | Sensors stop updating, "needs reauthentication" appears | The session expired and could not be renewed, or the password changed. Reconfigure the integration. |
-| "A parking session already exists" when booking | The portal holds one reservation at a time. Stop it first, or pass `force: true`. |
-| "No licence plate to book" | The plate field is empty. Fill it in, or pass `license_plate` to `start_booking`. |
+| "AA11BB is already parked" when booking | The portal refuses two overlapping reservations for one plate. Stop that session first, or book a different plate. |
+| "No licence plate to book" | The plate field is empty, so the book button has nothing to book. Fill it in. |
+| "There is no parking session for AA11BB" | That plate is not parked, so there is nothing to stop or change. Check the Bookings sensor for the plates that are. |
+| Stop, extend and shorten are `unavailable` with two cars parked | Buttons cannot name a car, so they step aside. Use the Calendar panel or an action with `license_plate`. See [Several cars](#several-cars). |
+| A change from the Calendar panel is refused | The portal only adjusts how long a booking lasts: moving its start or changing its plate is not possible. Cancel and book again instead. |
 | "is not a valid licence plate" | The plate has a typo or an unexpected shape. Letters and digits only. |
 | "cannot be extended by N minutes" | The portal will not prolong this reservation, or it already ends at the furthest bookable moment. |
 | "cannot be shortened by N minutes without ending it" | Shortening that far would move the end into the past. |
@@ -178,9 +219,17 @@ Notable behaviours of the portal that this integration handles:
   401. The client therefore treats a 5xx with a non-JSON body as "session expired", logs in
   once more, and retries exactly one time.
 - CSRF tokens rotate on every login, and the newly issued token must be re-read afterwards.
-- Only one reservation can be active at a time, so the booking list is not modelled.
+- Several reservations can be active at once, for different plates, so the booking list is
+  modelled and both the sensors and the calendar entity report it.
 - Booking actions answer with the updated permit rather than the whole account, so the
-  integration applies that response directly instead of polling again.
+  integration applies that response directly instead of polling again. That permit lists
+  **every** reservation, not just the one that changed, which is what makes it safe to apply
+  as-is when several cars are parked.
+- The portal refuses a second reservation for a plate whose booking already overlaps
+  (`Result: 24`), so overlapping bookings are only possible across different plates.
+- A reservation is addressed by its `ReservationID`. The calendar entity uses it as the event
+  uid, which is how the Calendar panel can cancel or resize one car's booking while several
+  are parked.
 - Changing a reservation is a **signed number of minutes**, not a new end time. The window and
   the plate of an existing reservation cannot be changed in place.
 - Booking omits the start and end dates, which makes the portal book from the current moment

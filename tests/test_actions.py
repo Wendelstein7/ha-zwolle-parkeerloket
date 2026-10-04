@@ -28,6 +28,7 @@ from .helpers import (
     build_account_payload,
     entity_id_for,
     load_fixture,
+    reservation_payload,
 )
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -123,6 +124,13 @@ def _device_id(hass: HomeAssistant) -> str:
     return entry.device_id
 
 
+def _bookings(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return the reservations the bookings sensor reports."""
+    state = hass.states.get(_entity(hass, "sensor", "bookings"))
+    assert state is not None
+    return state.attributes["reservations"]
+
+
 async def _set_plate(hass: HomeAssistant, value: str) -> None:
     """Type a value into the licence plate field."""
     await hass.services.async_call(
@@ -187,38 +195,26 @@ async def test_start_booking_applies_the_response_without_repolling(
     assert _state(hass, "sensor", "balance") == "118.0"
 
 
-async def test_start_booking_uses_the_plate_field(
+async def test_start_booking_requires_a_plate(
     hass: HomeAssistant,
     aioclient_mock: Any,
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """Without an explicit plate the field is what gets booked."""
-    _register_reads(aioclient_mock, build_account_payload())
-    _register_writes(aioclient_mock, build_account_payload())
-    await _setup(hass, account_entry, freezer, IDLE)
-    await _set_plate(hass, "cc22dd")
+    """The plate names the booking, so the action demands one.
 
-    await _call(hass, SERVICE_START_BOOKING)
-
-    assert _requests(aioclient_mock, CREATE_URL)[0]["LicensePlate"]["Value"] == "CC22DD"
-
-
-async def test_start_booking_without_any_plate_is_refused(
-    hass: HomeAssistant,
-    aioclient_mock: Any,
-    account_entry: MockConfigEntry,
-    freezer: Any,
-) -> None:
-    """There is nothing to book when no plate is known at all."""
+    The portal keeps several reservations at once, so an action that did not name
+    a car could act on the wrong one. Home Assistant rejects the call before our
+    code runs, so nothing reaches the portal. The exception type is left open
+    because it comes from Home Assistant's own field validation.
+    """
     _register_reads(aioclient_mock, build_account_payload())
     _register_writes(aioclient_mock, build_account_payload())
     await _setup(hass, account_entry, freezer, IDLE)
 
-    with pytest.raises(ServiceValidationError) as err:
+    with pytest.raises(Exception, match="license_plate"):
         await _call(hass, SERVICE_START_BOOKING)
 
-    assert err.value.translation_key == "plate_required"
     assert not _requests(aioclient_mock, CREATE_URL)
 
 
@@ -245,13 +241,17 @@ async def test_start_booking_with_an_impossible_plate_is_refused(
     assert not _requests(aioclient_mock, CREATE_URL)
 
 
-async def test_start_booking_refuses_a_second_booking(
+async def test_start_booking_refuses_a_plate_that_is_already_parked(
     hass: HomeAssistant,
     aioclient_mock: Any,
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """A second booking would cost balance, so it has to be asked for."""
+    """The portal refuses two overlapping bookings for one plate, and so do we.
+
+    Checking first means the user gets a clear message instead of a round trip
+    that was always going to be rejected.
+    """
     _register_reads(aioclient_mock, build_account_payload(reservation=BOOKING))
     _register_writes(aioclient_mock, build_account_payload(reservation=BOOKING))
     await _setup(hass, account_entry, freezer, DURING)
@@ -259,24 +259,25 @@ async def test_start_booking_refuses_a_second_booking(
     with pytest.raises(ServiceValidationError) as err:
         await _call(hass, SERVICE_START_BOOKING, {"license_plate": "AA11BB"})
 
-    assert err.value.translation_key == "booking_already_exists"
+    assert err.value.translation_key == "plate_already_parked"
+    assert err.value.translation_placeholders["plate"] == "AA11BB"
     assert not _requests(aioclient_mock, CREATE_URL)
 
 
-async def test_start_booking_can_be_forced(
+async def test_start_booking_allows_a_second_car(
     hass: HomeAssistant,
     aioclient_mock: Any,
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """The override lets a deliberate second booking through."""
+    """A different plate may be parked while another car is parked."""
     _register_reads(aioclient_mock, build_account_payload(reservation=BOOKING))
     _register_writes(aioclient_mock, build_account_payload(reservation=BOOKING))
     await _setup(hass, account_entry, freezer, DURING)
 
-    await _call(hass, SERVICE_START_BOOKING, {"license_plate": "AA11BB", "force": True})
+    await _call(hass, SERVICE_START_BOOKING, {"license_plate": "CC22DD"})
 
-    assert _requests(aioclient_mock, CREATE_URL)
+    assert _requests(aioclient_mock, CREATE_URL)[0]["LicensePlate"]["Value"] == "CC22DD"
 
 
 async def test_start_booking_rejection_from_the_portal_is_reported(
@@ -297,6 +298,37 @@ async def test_start_booking_rejection_from_the_portal_is_reported(
     assert "starttijd" in err.value.translation_placeholders["message"]
 
 
+async def test_a_same_plate_race_is_reported_in_the_portal_s_words(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+) -> None:
+    """The portal can refuse a plate that is not parked here yet.
+
+    Our own check only knows what the last poll returned, so if another client
+    books the same plate in between, the portal is the one that says no. Its
+    wording is passed through rather than guessed at.
+    """
+    _register_reads(aioclient_mock, build_account_payload())
+    aioclient_mock.post(
+        CREATE_URL,
+        json={
+            "ErrorMessage": (
+                "Het opgegeven kenteken is reeds in gebruik in een overlappende reservering"
+            ),
+            "Result": 24,
+        },
+    )
+    await _setup(hass, account_entry, freezer, IDLE)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await _call(hass, SERVICE_START_BOOKING, {"license_plate": "AA11BB"})
+
+    assert err.value.translation_key == "portal_rejected"
+    assert "overlappende" in err.value.translation_placeholders["message"]
+
+
 async def test_actions_need_one_of_our_accounts(
     hass: HomeAssistant,
     aioclient_mock: Any,
@@ -312,7 +344,7 @@ async def test_actions_need_one_of_our_accounts(
         await hass.services.async_call(
             DOMAIN,
             SERVICE_STOP_BOOKING,
-            {"entity_id": "sensor.something_else_entirely"},
+            {"entity_id": "sensor.something_else_entirely", "license_plate": "AA11BB"},
             blocking=True,
         )
 
@@ -323,19 +355,19 @@ async def test_actions_need_one_of_our_accounts(
 # --- stopping a booking ------------------------------------------------------
 
 
-async def test_stop_booking_cancels_the_current_reservation(
+async def test_stop_booking_cancels_the_named_plate(
     hass: HomeAssistant,
     aioclient_mock: Any,
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """Cancelling sends the reservation id, and the state follows the response."""
+    """Cancelling sends the reservation id of the plate, and applies the response."""
     _register_reads(aioclient_mock, build_account_payload(reservation=BOOKING))
     _register_writes(aioclient_mock, build_account_payload(balance=7200))
     await _setup(hass, account_entry, freezer, DURING)
     assert _state(hass, "binary_sensor", "parking_active") == "on"
 
-    await _call(hass, SERVICE_STOP_BOOKING)
+    await _call(hass, SERVICE_STOP_BOOKING, {"license_plate": "aa-11-bb"})
     await hass.async_block_till_done()
 
     body = _requests(aioclient_mock, END_URL)[0]
@@ -351,16 +383,40 @@ async def test_stop_booking_without_a_reservation_is_refused(
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """There is nothing to cancel when nothing is booked."""
+    """There is nothing to cancel when that plate is not parked."""
     _register_reads(aioclient_mock, build_account_payload())
     _register_writes(aioclient_mock, build_account_payload())
     await _setup(hass, account_entry, freezer, IDLE)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_STOP_BOOKING)
+        await _call(hass, SERVICE_STOP_BOOKING, {"license_plate": "AA11BB"})
 
-    assert err.value.translation_key == "no_booking"
+    assert err.value.translation_key == "no_booking_for_plate"
+    assert err.value.translation_placeholders["plate"] == "AA11BB"
     assert not _requests(aioclient_mock, END_URL)
+
+
+async def test_stop_booking_only_cancels_the_plate_it_was_given(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+) -> None:
+    """With two cars parked, the plate decides which one is cancelled."""
+    other = reservation_payload(
+        reservation_id=555002,
+        plate="CC22DD",
+        valid_from=BOOKING[0],
+        valid_until=BOOKING[1],
+    )
+    payload = build_account_payload(reservation=BOOKING, also_reserved=[other])
+    _register_reads(aioclient_mock, payload)
+    _register_writes(aioclient_mock, payload)
+    await _setup(hass, account_entry, freezer, DURING)
+
+    await _call(hass, SERVICE_STOP_BOOKING, {"license_plate": "CC22DD"})
+
+    assert _requests(aioclient_mock, END_URL)[0]["ReservationID"] == 555002
 
 
 # --- changing the duration ---------------------------------------------------
@@ -377,13 +433,15 @@ async def test_change_booking_time_extends(
     _register_writes(aioclient_mock, build_account_payload(reservation=LONG_BOOKING))
     await _setup(hass, account_entry, freezer, DURING)
 
-    await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+    await _call(
+        hass, SERVICE_CHANGE_BOOKING_TIME, {"license_plate": "AA11BB", "minutes": 30}
+    )
     await hass.async_block_till_done()
 
     body = _requests(aioclient_mock, UPDATE_URL)[0]
     assert body["Minutes"] == 30
     assert body["ReservationID"] == 555001
-    assert _state(hass, "sensor", "end") == "2026-10-05T09:00:00+00:00"
+    assert _bookings(hass)[0]["end"] == "2026-10-05T09:00:00+00:00"
 
 
 async def test_change_booking_time_shortens(
@@ -397,7 +455,9 @@ async def test_change_booking_time_shortens(
     _register_writes(aioclient_mock, build_account_payload(reservation=LONG_BOOKING))
     await _setup(hass, account_entry, freezer, "2026-10-05T08:00:00+00:00")
 
-    await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": -20})
+    await _call(
+        hass, SERVICE_CHANGE_BOOKING_TIME, {"license_plate": "AA11BB", "minutes": -20}
+    )
 
     assert _requests(aioclient_mock, UPDATE_URL)[0]["Minutes"] == -20
 
@@ -414,7 +474,11 @@ async def test_shortening_may_not_end_the_session(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": -30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": -30},
+        )
 
     assert err.value.translation_key == "cannot_shorten"
     assert err.value.translation_placeholders["minutes"] == "30"
@@ -434,7 +498,11 @@ async def test_extending_beyond_the_bookable_window_is_refused(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
     assert err.value.translation_key == "cannot_extend"
     assert err.value.translation_placeholders["minutes"] == "30"
@@ -454,7 +522,11 @@ async def test_extending_a_restricted_reservation_is_refused(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
     assert err.value.translation_key == "cannot_extend"
     assert not _requests(aioclient_mock, UPDATE_URL)
@@ -472,9 +544,14 @@ async def test_changing_without_a_reservation_is_refused(
     await _setup(hass, account_entry, freezer, IDLE)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
-    assert err.value.translation_key == "no_booking"
+    assert err.value.translation_key == "no_booking_for_plate"
+    assert err.value.translation_placeholders["plate"] == "AA11BB"
     assert not _requests(aioclient_mock, UPDATE_URL)
 
 
@@ -492,7 +569,11 @@ async def test_an_unknown_portal_rejection_is_passed_through(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
     assert err.value.translation_key == "portal_rejected"
     assert "Onbekende fout" in err.value.translation_placeholders["message"]
@@ -512,7 +593,11 @@ async def test_a_known_portal_rejection_gets_its_own_message(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(ServiceValidationError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
     assert err.value.translation_key == "plate_not_found"
 
@@ -529,7 +614,11 @@ async def test_a_connection_failure_is_not_reported_as_a_rejection(
     await _setup(hass, account_entry, freezer, DURING)
 
     with pytest.raises(HomeAssistantError) as err:
-        await _call(hass, SERVICE_CHANGE_BOOKING_TIME, {"minutes": 30})
+        await _call(
+            hass,
+            SERVICE_CHANGE_BOOKING_TIME,
+            {"license_plate": "AA11BB", "minutes": 30},
+        )
 
     assert err.value.translation_key == "cannot_connect_write"
 
@@ -563,17 +652,54 @@ async def test_buttons_during_a_booking(
     account_entry: MockConfigEntry,
     freezer: Any,
 ) -> None:
-    """With a booking running, stop and extend are offered, book is not."""
+    """With one car parked, stop and extend are offered; booking that car is not."""
     _register_reads(aioclient_mock, build_account_payload(reservation=BOOKING))
     _register_writes(aioclient_mock, build_account_payload(reservation=BOOKING))
     await _setup(hass, account_entry, freezer, DURING)
     await _set_plate(hass, "AA11BB")
 
+    # That plate is parked already, and the portal refuses an overlapping booking.
     assert _is_unavailable(hass, "button", "book_now")
     assert not _is_unavailable(hass, "button", "stop_booking")
     assert not _is_unavailable(hass, "button", "extend_time")
     # Shortening by the step would end the session before now.
     assert _is_unavailable(hass, "button", "shorten_time")
+
+    # A different car can still be booked while this one is parked.
+    await _set_plate(hass, "CC22DD")
+
+    assert not _is_unavailable(hass, "button", "book_now")
+
+
+async def test_buttons_step_aside_when_several_cars_are_parked(
+    hass: HomeAssistant,
+    aioclient_mock: Any,
+    account_entry: MockConfigEntry,
+    freezer: Any,
+) -> None:
+    """A button cannot name a car, so with two parked it does not act at all.
+
+    Cancelling whichever car happened to come first could cancel the wrong one.
+    The calendar and the action services both name a booking, so they take over.
+    """
+    other = reservation_payload(
+        reservation_id=555002,
+        plate="CC22DD",
+        valid_from=BOOKING[0],
+        valid_until=BOOKING[1],
+    )
+    payload = build_account_payload(reservation=BOOKING, also_reserved=[other])
+    _register_reads(aioclient_mock, payload)
+    _register_writes(aioclient_mock, payload)
+    await _setup(hass, account_entry, freezer, DURING)
+
+    for key in ("stop_booking", "extend_time", "shorten_time"):
+        assert _is_unavailable(hass, "button", key), key
+
+    # Booking a third car is still a perfectly clear thing to ask for.
+    await _set_plate(hass, "DD44EE")
+
+    assert not _is_unavailable(hass, "button", "book_now")
 
 
 async def test_shorten_button_is_available_on_a_long_enough_booking(

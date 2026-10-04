@@ -59,18 +59,50 @@ def entity_id_for(hass: HomeAssistant, platform: str, key: str) -> str | None:
     return registry.async_get_entity_id(platform, DOMAIN, f"{MELDNUMMER}_{key}")
 
 
+DEFAULT_RESERVATION_ID = 555001
+
+
+def reservation_payload(
+    *,
+    reservation_id: int = DEFAULT_RESERVATION_ID,
+    plate: str = "AA11BB",
+    valid_from: str,
+    valid_until: str,
+    units: int = 30,
+) -> dict[str, Any]:
+    """Return one entry for the portal's ``ActiveReservations`` list."""
+    return {
+        "ReservationID": reservation_id,
+        "ValidFrom": valid_from,
+        "ValidUntil": valid_until,
+        "LicensePlate": {
+            "IsCleared": False,
+            "IsAnonymised": False,
+            "DisplayValue": plate,
+            "Value": plate,
+            "Name": None,
+        },
+        "Units": units,
+        "PermitMediaCode": MELDNUMMER,
+    }
+
+
 def build_account_payload(
     *,
     balance: int = 7140,
     reservation: tuple[str, str] | None = None,
+    also_reserved: list[dict[str, Any]] | None = None,
     plate: str = "AA11BB",
     restricted_prolong: bool = False,
+    restricted_prolong_ids: list[int] | None = None,
     horizon: str | None = None,
 ) -> dict[str, Any]:
     """Return an account payload with the state a test needs.
 
     ``reservation`` is a ``(ValidFrom, ValidUntil)`` pair, omitted for an account
-    with nothing booked. ``restricted_prolong`` marks that reservation as one the
+    with nothing booked. ``also_reserved`` adds further reservations, built with
+    :func:`reservation_payload`, for the accounts that have more than one car
+    parked at once. ``restricted_prolong`` marks the default reservation as one the
     portal refuses to extend, and ``horizon`` adds the bookable window the portal
     publishes as ``BlockTimes``.
     """
@@ -80,26 +112,22 @@ def build_account_payload(
 
     media["Balance"] = balance
     media["Code"] = MELDNUMMER
-    media["ActiveReservations"] = []
+
+    active: list[dict[str, Any]] = []
     if reservation is not None:
         start, end = reservation
-        media["ActiveReservations"].append(
-            {
-                "ReservationID": 555001,
-                "ValidFrom": start,
-                "ValidUntil": end,
-                "LicensePlate": {
-                    "IsCleared": False,
-                    "IsAnonymised": False,
-                    "DisplayValue": plate,
-                    "Value": plate,
-                    "Name": None,
-                },
-                "Units": 30,
-                "PermitMediaCode": MELDNUMMER,
-            }
+        active.append(
+            reservation_payload(plate=plate, valid_from=start, valid_until=end)
         )
-    media["RestrictedProlongReservationIDs"] = [555001] if restricted_prolong else []
+    active.extend(also_reserved or [])
+    media["ActiveReservations"] = active
+
+    if restricted_prolong_ids is not None:
+        restricted = restricted_prolong_ids
+    else:
+        restricted = [DEFAULT_RESERVATION_ID] if restricted_prolong else []
+    media["RestrictedProlongReservationIDs"] = restricted
+
     permit["BlockTimes"] = (
         [{"ValidFrom": "2026-10-04T00:00:00Z", "ValidUntil": horizon}]
         if horizon is not None

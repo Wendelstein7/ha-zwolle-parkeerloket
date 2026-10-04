@@ -4,25 +4,29 @@ start_booking:
       integration: zwolle_parkeerloket
   fields:
     license_plate:
-      required: false
+      required: true
       selector:
         text:
-    force:
-      required: false
-      default: false
-      selector:
-        boolean:
 
 stop_booking:
   target:
     entity:
       integration: zwolle_parkeerloket
+  fields:
+    license_plate:
+      required: true
+      selector:
+        text:
 
 change_booking_time:
   target:
     entity:
       integration: zwolle_parkeerloket
   fields:
+    license_plate:
+      required: true
+      selector:
+        text:
     minutes:
       required: true
       selector:

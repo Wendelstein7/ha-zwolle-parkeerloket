@@ -46,11 +46,8 @@
       "plate": {
         "name": "Kenteken"
       },
-      "start": {
-        "name": "Parkeren vanaf"
-      },
-      "end": {
-        "name": "Parkeren tot"
+      "bookings": {
+        "name": "Boekingen"
       },
       "zone": {
         "name": "Zone"
@@ -75,6 +72,11 @@
         "name": "Verkort met 30 minuten"
       }
     },
+    "calendar": {
+      "calendar": {
+        "name": "Parkeerkalender"
+      }
+    },
     "text": {
       "plate_draft": {
         "name": "Kenteken om te boeken"
@@ -84,26 +86,32 @@
   "services": {
     "start_booking": {
       "name": "Start boeking",
-      "description": "Boek een parkeersessie die nu begint, voor de standaardduur van het portaal.",
+      "description": "Boek een parkeersessie voor een kenteken die nu begint, voor de standaardduur van het portaal.",
       "fields": {
         "license_plate": {
           "name": "Kenteken",
-          "description": "Te boeken kenteken. Standaard het kenteken in het kentekenveld, of het al geboekte kenteken."
-        },
-        "force": {
-          "name": "Forceren",
-          "description": "Boek toch terwijl er al een reservering is. Het portaal staat er maar één tegelijk toe, en elke boeking kost tegoed."
+          "description": "Te boeken kenteken. Het portaal weigert een kenteken dat al een overlappende boeking heeft."
         }
       }
     },
     "stop_booking": {
       "name": "Stop boeking",
-      "description": "Annuleer de huidige parkeersessie en stort de ongebruikte minuten terug."
+      "description": "Annuleer de parkeersessie van een kenteken en stort de ongebruikte minuten terug.",
+      "fields": {
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Kenteken waarvan de parkeersessie moet worden geannuleerd."
+        }
+      }
     },
     "change_booking_time": {
       "name": "Boekingstijd wijzigen",
-      "description": "Verleng of verkort de huidige parkeersessie.",
+      "description": "Verleng of verkort de parkeersessie van een kenteken.",
       "fields": {
+        "license_plate": {
+          "name": "Kenteken",
+          "description": "Kenteken waarvan de parkeersessie moet worden gewijzigd."
+        },
         "minutes": {
           "name": "Minuten",
           "description": "Minuten erbij, of een negatief aantal minuten eraf. Verlengen kost tegoed; verkorten stort terug."
@@ -115,23 +123,29 @@
     "no_target": {
       "message": "Kies het parkeeraccount waarop de actie moet worden uitgevoerd."
     },
-    "no_booking": {
-      "message": "Er is geen parkeersessie om te wijzigen."
+    "no_booking_for_plate": {
+      "message": "Er is geen parkeersessie voor {plate}."
     },
     "plate_required": {
-      "message": "Geen kenteken om te boeken. Vul het kentekenveld in of geef license_plate mee."
+      "message": "Geen kenteken om te boeken. Vul eerst het kentekenveld in."
     },
     "invalid_plate": {
       "message": "{plate} is geen geldig kenteken."
     },
-    "booking_already_exists": {
-      "message": "Er loopt al een parkeersessie. Nog een boeking kost tegoed; annuleer eerst, of geef force mee om toch te boeken."
+    "plate_already_parked": {
+      "message": "{plate} staat al geparkeerd. Het portaal weigert twee overlappende boekingen voor één kenteken."
+    },
+    "several_bookings": {
+      "message": "Er staan meerdere auto's geparkeerd, dus het is niet duidelijk welke boeking deze knop bedoelt. Gebruik de actie stop_booking of change_booking_time met een kenteken, of de kalender."
     },
     "cannot_extend": {
       "message": "Deze sessie kan niet met {minutes} minuten worden verlengd. Hij eindigt al om {until}, wat het portaal maximaal toestaat."
     },
     "cannot_shorten": {
       "message": "Deze sessie kan niet met {minutes} minuten worden verkort zonder hem te beëindigen."
+    },
+    "unknown_booking": {
+      "message": "Die boeking staat niet meer in het portaal. Ververs en probeer opnieuw."
     },
     "reservation_rejected_time": {
       "message": "Het portaal weigerde de wijziging: {message}"
@@ -144,6 +158,18 @@
     },
     "cannot_connect_write": {
       "message": "Kan het Zwolle Parkeerloket niet bereiken; de actie is niet uitgevoerd."
+    },
+    "calendar_start_is_fixed": {
+      "message": "Een boeking kan niet worden verplaatst: hij begint om {start}. Het portaal wijzigt alleen hoe lang hij duurt."
+    },
+    "calendar_plate_is_fixed": {
+      "message": "Het kenteken van een boeking kan niet worden gewijzigd. Annuleer de boeking en boek opnieuw voor het andere kenteken."
+    },
+    "calendar_whole_minutes": {
+      "message": "Het portaal wijzigt een boeking in hele minuten."
+    },
+    "calendar_whole_days": {
+      "message": "Een parkeerboeking kan geen dagvullende gebeurtenis zijn."
     }
   }
 }

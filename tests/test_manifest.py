@@ -176,13 +176,16 @@ def test_every_entity_used_in_code_is_translated() -> None:
     """Each translation key an entity uses must exist in the translation files."""
     strings = json.loads((COMPONENT_DIR / "strings.json").read_text(encoding="utf-8"))
     translated = {
-        "sensor": set(strings["entity"]["sensor"]),
-        "binary_sensor": set(strings["entity"]["binary_sensor"]),
+        platform: set(strings["entity"][platform])
+        for platform in ("sensor", "binary_sensor", "button", "text", "calendar")
     }
 
     for module, platform in (
         ("sensor.py", "sensor"),
         ("binary_sensor.py", "binary_sensor"),
+        ("button.py", "button"),
+        ("text.py", "text"),
+        ("calendar.py", "calendar"),
     ):
         source = (COMPONENT_DIR / module).read_text(encoding="utf-8")
         used = set(
@@ -192,6 +195,23 @@ def test_every_entity_used_in_code_is_translated() -> None:
         assert used <= translated[platform], (
             f"{module} uses untranslated keys: {used - translated[platform]}"
         )
+
+
+def test_every_action_requires_a_licence_plate() -> None:
+    """A plate is how an action names a booking, so every action needs one.
+
+    The portal keeps several reservations at once, so an action that did not name
+    a car could act on the wrong one. Home Assistant reads ``required`` from here
+    to decide whether the field may be left empty in the UI.
+    """
+    described = yaml.safe_load(
+        (COMPONENT_DIR / "services.yaml").read_text(encoding="utf-8")
+    )
+
+    for name, service in described.items():
+        plate = (service.get("fields") or {}).get("license_plate")
+        assert plate is not None, f"{name} does not accept a licence plate"
+        assert plate.get("required") is True, f"{name} does not require a plate"
 
 
 def test_every_action_is_described_and_translated() -> None:

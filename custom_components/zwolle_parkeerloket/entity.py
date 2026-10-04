@@ -32,14 +32,15 @@ class ZwolleParkeerloketEntity(CoordinatorEntity[ZwolleParkeerloketCoordinator])
 
     @property
     def reservation(self) -> Reservation | None:
-        """Return the reservation covering now, else the soonest upcoming one.
+        """Return the reservation the entities describe: the car ending soonest.
 
-        Only one reservation can be active at a time, and a booking may be
-        scheduled in the future, in which case nothing is active right now.
+        Several cars can be parked at once, so an entity holding a single value
+        shows the session most likely to need attention, and reports how many
+        others there are so the lone value cannot mislead.
         """
-        return self.coordinator.data.media.current_reservation(dt_util.utcnow())
+        return self.coordinator.primary_reservation
 
     @property
-    def active_reservation(self) -> Reservation | None:
-        """Return the reservation covering the current moment, if there is one."""
-        return self.coordinator.data.media.reservation_covering(dt_util.utcnow())
+    def active_reservations(self) -> tuple[Reservation, ...]:
+        """Return every reservation parking a car right now, ending soonest first."""
+        return self.coordinator.data.media.active_reservations(dt_util.utcnow())

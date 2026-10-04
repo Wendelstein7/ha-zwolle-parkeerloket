@@ -5,10 +5,10 @@
     "@Wendelstein7"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/Wendelstein7/ha-zwolle-bezoekersparkeren",
+  "documentation": "https://github.com/Wendelstein7/ha-zwolle-parkeerloket",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/Wendelstein7/ha-zwolle-bezoekersparkeren/issues",
+  "issue_tracker": "https://github.com/Wendelstein7/ha-zwolle-parkeerloket/issues",
   "requirements": [],
   "version": "0.2.0"
 }

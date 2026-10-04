@@ -158,7 +158,7 @@ Cancelling refunds what was not used, and cancelling before the start refunds ev
 ### HACS
 
 1. In HACS, open **Integrations** → the three-dot menu → **Custom repositories**.
-2. Add `https://github.com/Wendelstein7/ha-zwolle-bezoekersparkeren` as an **Integration**.
+2. Add `https://github.com/Wendelstein7/ha-zwolle-parkeerloket` as an **Integration**.
 3. Install **Zwolle Parkeerloket** and restart Home Assistant.
 
 ### Manually

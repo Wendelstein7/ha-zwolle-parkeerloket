@@ -102,6 +102,23 @@ def test_hacs_json_matches_the_hacs_schema() -> None:
     HACS_MANIFEST_SCHEMA(hacs)
 
 
+def test_declared_minimum_home_assistant_can_parse_the_code() -> None:
+    """The declared floor has to be high enough for the syntax this module uses.
+
+    Home Assistant moved to Python 3.14 in 2026.3, and 3.14 is what allows the
+    parenthesis-free ``except`` clauses the formatter writes here. HACS refuses to
+    install below the version declared in ``hacs.json``, so declaring anything
+    lower would offer the integration to a Home Assistant that cannot parse it.
+    """
+    hacs = json.loads((REPO_ROOT / "hacs.json").read_text(encoding="utf-8"))
+
+    declared = hacs.get("homeassistant")
+    assert declared, "hacs.json should declare a minimum Home Assistant version"
+    assert AwesomeVersion(declared) >= AwesomeVersion("2026.3.0"), (
+        "the minimum has to stay at or above the release that runs Python 3.14"
+    )
+
+
 def test_manifest_declares_everything_hacs_requires() -> None:
     """HACS reads the manifest directly, so its required keys must all be present."""
     manifest = _manifest()

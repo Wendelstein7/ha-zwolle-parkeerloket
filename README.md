@@ -155,6 +155,9 @@ Cancelling refunds what was not used, and cancelling before the start refunds ev
 
 ## Installation
 
+Requires Home Assistant **2026.3.0** or newer — HACS refuses to install it on anything older.
+Developed and tested against 2026.9.4 (stable) and 2026.10.0b0 (beta).
+
 ### HACS
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Wendelstein7&repository=ha-zwolle-parkeerloket&category=integration)

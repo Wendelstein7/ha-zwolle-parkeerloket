@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `hacs.json` now declares Home Assistant **2026.3.0** as the minimum, so HACS refuses older
+  installations instead of letting them fail to import. The code uses the parenthesis-free
+  `except` form, which needs Python 3.14 — the release where Home Assistant moved to it.
 - The integration and its device are called **Zwolle Parkeerloket** rather than
   "Zwolle Bezoekersparkeren": the account is just as usable for parking your own car as for a
   visitor's, so the name no longer narrows it to visitors. Entity IDs therefore start with

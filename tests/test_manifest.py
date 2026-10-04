@@ -119,6 +119,20 @@ def test_declared_minimum_home_assistant_can_parse_the_code() -> None:
     )
 
 
+def test_hacs_json_declares_the_country_the_portal_serves() -> None:
+    """The portal only exists in the Netherlands, and HACS filters on that.
+
+    HACS hides an integration from users in other countries and expects this key for
+    anything country specific, so losing it would quietly narrow or widen who is
+    offered the integration.
+    """
+    hacs = json.loads((REPO_ROOT / "hacs.json").read_text(encoding="utf-8"))
+
+    assert hacs.get("country") == "NL", (
+        "the Zwolle portal is Dutch only; HACS needs this to list it correctly"
+    )
+
+
 def test_manifest_declares_everything_hacs_requires() -> None:
     """HACS reads the manifest directly, so its required keys must all be present."""
     manifest = _manifest()

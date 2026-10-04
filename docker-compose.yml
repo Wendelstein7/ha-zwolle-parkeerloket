@@ -1,0 +1,34 @@
+# A throwaway, clean Home Assistant instance for trying the integration out.
+#
+#   docker compose up -d      # start; open http://localhost:8123
+#   docker compose logs -f    # follow the log
+#   docker compose down -v    # stop and throw the instance away
+#
+# The first start drops you into Home Assistant's onboarding, exactly like a new
+# installation, so you can add the integration the way a user would.
+#
+# Notes:
+# * `network_mode: host` is what Home Assistant recommends on Linux; the UI is then
+#   on port 8123 of the host. Stop any other Home Assistant on that port first.
+# * The config lives in a named volume, not a bind mount, so nothing root-owned
+#   ends up in your working copy and `down -v` really does start over.
+# * The integration is mounted read-only: Home Assistant only reads it, and this
+#   keeps bytecode caches out of the repository.
+# * Change `stable` to `beta` (or an exact tag such as `2026.9.4`) to test a
+#   different Home Assistant release. This integration is tested against the
+#   current stable and the current beta.
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: zwolle-parkeerloket-dev
+    restart: "no"
+    network_mode: host
+    volumes:
+      - homeassistant-config:/config
+      - ./custom_components:/config/custom_components:ro
+    environment:
+      TZ: Europe/Amsterdam
+
+volumes:
+  homeassistant-config:

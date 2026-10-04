@@ -9,7 +9,7 @@ on:
 
 jobs:
   pytest:
-    name: pytest
+    name: pytest (latest)
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -22,6 +22,34 @@ jobs:
 
       - name: Install test dependencies
         run: pip install -r requirements_test.txt
+
+      - name: Run tests
+        run: pytest
+
+  pytest-stable:
+    # The requirements pin the newest release; users run the stable one, and the
+    # supported API surface moves between them. Install the stable pair on top so
+    # a break on stable is caught here rather than by a user.
+    name: pytest (current stable)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install test dependencies
+        run: |
+          pip install -r requirements_test.txt
+          pip install \
+            "pytest-homeassistant-custom-component==0.13.367" \
+            "homeassistant==2026.9.4"
+
+      - name: Show the Home Assistant version under test
+        run: python -c "from homeassistant.const import __version__; print(__version__)"
 
       - name: Run tests
         run: pytest

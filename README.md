@@ -108,8 +108,40 @@ uv pip install --python .venv/bin/python -r requirements_dev.txt
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-To run a local Home Assistant instance that loads the integration straight from this
-repository, copy the integration into the (gitignored) development config directory:
+The integration is tested against the current stable Home Assistant release and the current
+beta, and CI runs both.
+
+### Trying it in a clean Home Assistant
+
+**With Docker** — a throwaway, fresh instance in one command, so you see the same onboarding
+and setup a new user gets:
+
+```bash
+docker compose up -d        # first run may need: sudo docker compose up -d
+```
+
+Open <http://localhost:8123>, complete onboarding, then go to
+**Settings → Devices & services → Add integration → Zwolle Bezoekersparkeren** and enter the
+Meldnummer and Pincode. Useful commands:
+
+```bash
+docker compose logs -f homeassistant     # follow the log
+docker compose down                      # stop, keep the instance
+docker compose down -v                   # stop and throw it away
+```
+
+The compose file uses Home Assistant's `stable` image and mounts `custom_components`
+read-only, so nothing root-owned lands in your working copy. Change the image tag to `beta`
+or to an exact version such as `2026.9.4` to test a different release.
+
+> **Snap users:** the `docker` snap starts `dockerd` with `--group docker`, but the snap
+> cannot resolve a group created after it started — `getent group docker` inside the snap
+> returns nothing — so `/run/docker.sock` stays `root:root` and plain `docker` gives
+> "permission denied". Either prefix the commands with `sudo`, or install Docker from
+> [Docker's own apt repository](https://docs.docker.com/engine/install/ubuntu/), which does
+> not have this quirk.
+
+**Without Docker** — a local Home Assistant from the development environment:
 
 ```bash
 mkdir -p config/custom_components
@@ -117,8 +149,9 @@ ln -sfn ../../custom_components/zwolle_parkeerloket config/custom_components/zwo
 .venv/bin/hass -c config --skip-pip
 ```
 
-Then open <http://localhost:8123>. The `config/` directory is gitignored: it holds a throwaway
-instance, its database and its storage, and must never contain real credentials in a commit.
+The `config/` directory is gitignored: it holds a throwaway instance, its database and its
+storage, and must never contain real credentials in a commit. Delete its `.storage` directory
+to start over from onboarding.
 
 The fixtures under `tests/fixtures` and the placeholders in `tests/helpers.py` are synthetic.
 Never copy real credentials, licence plates or names out of a live account into this repository:

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A `docker-compose.yml` for trying the integration in a throwaway, clean Home
+  Assistant instance.
+- CI coverage for the current stable Home Assistant release alongside the newest one.
 - Initial, read-only version monitoring a visitor-parking account on the Gemeente
   Zwolle "Parkeerloket" portal:
   - remaining balance sensor

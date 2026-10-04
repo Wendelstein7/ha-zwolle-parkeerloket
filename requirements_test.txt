@@ -1,5 +1,10 @@
 # Test environment, pinned for reproducibility.
 # pytest-homeassistant-custom-component pins the exact Home Assistant release it
 # supports; homeassistant and pytest are listed explicitly for clarity.
+#
+# These are the *newest* releases, so breakage is noticed early. The current
+# stable pair (pytest-homeassistant-custom-component 0.13.367 + homeassistant
+# 2026.9.4, which is what the `stable` Docker image runs) is verified by a
+# separate CI job; see .github/workflows/test.yml.
 homeassistant==2026.10.0b0
 pytest-homeassistant-custom-component==0.13.368

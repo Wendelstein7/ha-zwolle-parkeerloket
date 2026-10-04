@@ -249,6 +249,36 @@ The fixtures under `tests/fixtures` and the placeholders in `tests/helpers.py` a
 Never copy real credentials, licence plates or names out of a live account into this repository:
 this repository is public, and the portal account belongs to a real person.
 
+### Releasing
+
+HACS takes the tag of the newest GitHub release as the version it offers, so a release is
+what turns a commit into something users can install and upgrade to. A tag on its own is not
+enough: without a release, HACS falls back to the last commit hash.
+
+`manifest.json` and the tag must carry the same version, because HACS reports the tag while
+Home Assistant displays the manifest version. So a release goes:
+
+```bash
+# 1. Cut the changelog: rename [Unreleased] to the version and the date, leave a fresh
+#    empty [Unreleased] on top, and set the same version in manifest.json.
+# 2. Commit that, then tag and push it:
+git tag -a v0.3.0 -m "0.3.0"
+git push origin main
+git push origin v0.3.0
+# 3. Publish the release, pasting the changelog section in as its notes:
+gh release create v0.3.0 --title "0.3.0"
+```
+
+The tag has to parse as a version: `0.3.0` and `v0.3.0` are both fine, `release-0.3.0` is
+not. Tag a commit on the default branch, since HACS installs the integration out of that
+tag's archive.
+
+Step 3 works without the GitHub CLI too: **Releases → Draft a new release**, choose the tag
+you just pushed, and paste that changelog section in as the description.
+
+Mark a release as a **pre-release** to use it as a beta channel — HACS hides pre-releases
+from users who have not switched on beta versions for the repository.
+
 ## Brand assets
 
 The icon under `custom_components/zwolle_parkeerloket/brand/` is the logo of Gemeente

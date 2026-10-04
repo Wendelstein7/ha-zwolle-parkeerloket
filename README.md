@@ -20,6 +20,8 @@ extend and shorten a reservation.
 > plate twice over the same period — the portal refuses that too — but a booking you make is
 > a real booking. See [Actions](#actions).
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Wendelstein7&repository=ha-zwolle-parkeerloket&category=integration)
+
 ## Features
 
 - Monitoring: balance, how many cars are parked, and which plates they use.
@@ -160,11 +162,9 @@ Developed and tested against 2026.9.4 (stable) and 2026.10.0b0 (beta).
 
 ### HACS
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Wendelstein7&repository=ha-zwolle-parkeerloket&category=integration)
-
-The button adds the repository to HACS on your own instance, with the URL and category
-already filled in. It does not install anything by itself: after adding it, install
-**Zwolle Parkeerloket** and restart Home Assistant.
+Add this repository with the **Add to HACS** button at the top of this page, then install
+**Zwolle Parkeerloket** and restart Home Assistant. The button only adds the repository to
+HACS; installing it is still a separate, deliberate step.
 
 Or do it by hand:
 

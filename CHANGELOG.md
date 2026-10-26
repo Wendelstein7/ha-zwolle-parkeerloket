@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-26
+
+- Redact the account holder's name and the permit zone from diagnostics. The name can be the
+  permit holder's own, and the zone gives away where they live.
+
 ## [1.0.1] - 2026-10-04
 
 - Declare `"country": "NL"` in `hacs.json`, marking the integration as Dutch only. HACS needs

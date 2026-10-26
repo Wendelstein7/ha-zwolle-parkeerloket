@@ -1,14 +1,16 @@
 """Diagnostics support for the Zwolle Parkeerloket integration.
 
-The Meldnummer, the Pincode, the permit media code and every licence plate are
-redacted: they are personal data and diagnostics are meant to be shareable.
+The Meldnummer, the Pincode, the permit media code, the account holder's name,
+the permit zone and every licence plate are redacted: they are personal data (the
+zone gives away where the permit holder lives) and diagnostics are meant to be
+shareable.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_MELDNUMMER, CONF_PERMIT_MEDIA_TYPE_ID, CONF_PINCODE
@@ -22,7 +24,7 @@ def _redact_plate(plate: LicensePlate | None) -> dict[str, Any] | None:
     """Describe a licence plate without revealing it."""
     if plate is None:
         return None
-    return {"value": "**REDACTED**", "name": "**REDACTED**"}
+    return {"value": REDACTED, "name": REDACTED}
 
 
 def _describe_reservation(reservation: Reservation) -> dict[str, Any]:
@@ -49,9 +51,9 @@ async def async_get_config_entry_diagnostics(
             "options": dict(entry.options),
         },
         "account": {
-            "name": coordinator.data.account.name,
+            "name": REDACTED,
             "permit_media_count": len(coordinator.data.account.media),
-            "zone_code": media.zone_code,
+            "zone_code": REDACTED,
             "media_type_id": media.type_id,
             "balance": media.balance,
             "reservation_count": len(media.reservations),

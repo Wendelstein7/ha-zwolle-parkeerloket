@@ -26,8 +26,10 @@ pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 async def test_diagnostics_redact_credentials_and_plates(
     hass: HomeAssistant, aioclient_mock: Any, account_entry: MockConfigEntry
 ) -> None:
-    """The Meldnummer, Pincode and every licence plate are redacted."""
+    """The credentials, holder's name, permit zone and every plate are redacted."""
     payload = load_fixture("account_active_reservation.json")
+    # The fixture's name is empty; use a real-looking one so a leak would show.
+    payload["Name"] = "Jan Jansen"
     aioclient_mock.post(LOGIN_URL, json=payload)
     aioclient_mock.post(GETBASE_URL, json=payload)
     account_entry.add_to_hass(hass)
@@ -43,6 +45,10 @@ async def test_diagnostics_redact_credentials_and_plates(
     assert "AA-11-BB" not in serialised
     assert "Visitor one" not in serialised
     assert "CC22DD" not in serialised
+    assert "Jan Jansen" not in serialised
+    assert "ZONE1" not in serialised
+    assert diagnostics["account"]["name"] == "**REDACTED**"
+    assert diagnostics["account"]["zone_code"] == "**REDACTED**"
 
 
 async def test_diagnostics_still_describe_the_account(
@@ -60,7 +66,6 @@ async def test_diagnostics_still_describe_the_account(
     account = diagnostics["account"]
 
     assert account["balance"] == 7140
-    assert account["zone_code"] == "ZONE1"
     assert account["media_type_id"] == 9
     assert account["reservation_count"] == 1
     assert account["license_plate_count"] == 2
